@@ -1,0 +1,40 @@
+# Robô de alertas: roda a verificação direto no runner do GitHub (sem passar
+# pelo Vercel), a cada 15 minutos, todos os dias. Configuração em
+# GITHUB_ACTIONS.md.
+name: Check alerts
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+# Uma execução por vez: se uma rodada atrasar, a próxima espera em vez de
+# verificar os mesmos alertas em paralelo.
+concurrency:
+  group: check-alerts
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install server dependencies
+        run: npm ci --workspace=server --no-audit --no-fund
+
+      - name: Check alerts
+        run: npm run check-alerts --workspace=server
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ALERT_EMAIL_FROM: ${{ secrets.ALERT_EMAIL_FROM }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}

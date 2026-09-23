@@ -78,8 +78,11 @@ export async function checkAlert(alert, { notify = true } = {}) {
   return { alertId: alert.id, newCount: newMatches.length, errors };
 }
 
-/** Checks every active alert, within the serverless time budget. */
-export async function checkAllAlerts() {
+/**
+ * Checks every active alert, within the time budget (serverless by default;
+ * the GitHub Actions runner passes a larger one).
+ */
+export async function checkAllAlerts({ budgetMs = RUN_BUDGET_MS } = {}) {
   const startedAt = Date.now();
   const queue = await db.listActiveAlerts();
   const results = [];
@@ -87,7 +90,7 @@ export async function checkAllAlerts() {
 
   async function worker() {
     while (queue.length > 0) {
-      if (Date.now() - startedAt > RUN_BUDGET_MS) {
+      if (Date.now() - startedAt > budgetMs) {
         skipped += queue.length;
         queue.length = 0;
         return;

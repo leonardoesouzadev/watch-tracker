@@ -32,7 +32,7 @@ novos desde a última busca.
 - **Busca manual sem banco:** palavras-chave e histórico de anúncios já
   vistos da tela de busca ficam no `localStorage` do navegador.
 - **Alertas (robô):** a tela **Alertas** salva parâmetros no servidor
-  (Postgres). Um agendador chama o servidor a cada 15 min, que roda a busca
+  (Postgres). O GitHub Actions roda o robô a cada 15 min, que faz a busca
   de cada alerta ativo e avisa por **e-mail** e **Telegram** quando aparece
   um lote que ainda não tinha sido visto. Ver [Alertas](#alertas).
 - **Backend mínimo:** Node/Express. Cada fonte é um arquivo em
@@ -46,12 +46,13 @@ server/
   src/app.js                         Rotas Express
   src/search.js                      Agrega os scrapers
   src/alerts/                        Alertas: banco (db), robô (checker), avisos (notify), rotas
-shared/                              Código usado pelo cliente e pelo servidor (filtro de relógios, fontes)
-.github/workflows/check-alerts.yml   Agendador: chama o robô a cada 15 min
+  src/check-alerts.js                Roda o robô uma vez (usado pelo GitHub Actions)
   src/scrapers/leiloesbr.js          Scraper do LeilõesBR (cheerio)
   src/scrapers/receitaFederal.js     Cliente da API do Leilão Eletrônico da Receita Federal
   src/scrapers/miltonsayegh.js       Scraper do Milton Sayegh Leilões (cheerio)
   src/scrapers/sothebys.js           Cliente do índice Algolia embutido na busca da Sotheby's
+shared/                              Código usado pelo cliente e pelo servidor (filtro de relógios, fontes)
+.github/workflows/check-alerts.yml   Agendador: roda o robô a cada 15 min no GitHub Actions
 ```
 
 ## 1. Configurar o servidor
@@ -104,7 +105,8 @@ termo de busca reinicia o histórico do alerta.
 ### Configuração
 
 Todas as variáveis estão em `server/.env.example`. No Vercel, cadastre-as em
-*Settings → Environment Variables*.
+*Settings → Environment Variables*. Passo a passo detalhado do Supabase e do
+Telegram em [CONFIGURACAO.md](CONFIGURACAO.md).
 
 1. **Banco:** crie um Postgres gratuito (ex: [Neon](https://neon.tech)) e
    defina `DATABASE_URL`. As tabelas são criadas sozinhas.
@@ -119,13 +121,13 @@ Todas as variáveis estão em `server/.env.example`. No Vercel, cadastre-as em
    `https://api.telegram.org/bot<TOKEN>/getUpdates` — o `chat.id` que
    aparece vai em `TELEGRAM_CHAT_ID` (para um grupo, adicione o bot ao grupo;
    o id começa com `-`).
-4. **Agendador:** defina `CRON_SECRET` (valor longo e aleatório) no Vercel.
-   No GitHub, em *Settings → Secrets and variables → Actions*, crie os
-   secrets `APP_URL` (ex: `https://seu-app.vercel.app`) e `CRON_SECRET`
-   (mesmo valor). O workflow `check-alerts.yml` passa a chamar
-   `POST /api/cron/check-alerts` a cada 15 min — dá pra disparar na mão em
-   *Actions → Check alerts → Run workflow*. O `vercel.json` também registra um
-   cron diário do Vercel como rede de segurança.
+4. **Agendador:** o workflow `check-alerts.yml` roda o robô direto no GitHub
+   Actions a cada 15 min, todos os dias, sem depender do Vercel. Cadastre as
+   variáveis acima como secrets em *Settings → Secrets and variables →
+   Actions* — passo a passo em [GITHUB_ACTIONS.md](GITHUB_ACTIONS.md). Dá pra
+   disparar na mão em *Actions → Check alerts → Run workflow*. O `vercel.json`
+   também registra um cron diário do Vercel (chama `/api/cron/check-alerts`,
+   protegido por `CRON_SECRET`) como rede de segurança.
 5. Na tela **Alertas**, use **Enviar teste** para confirmar e-mail e Telegram.
 
 **Rodando localmente:** com `DATABASE_URL` no `server/.env`, defina
@@ -133,9 +135,9 @@ Todas as variáveis estão em `server/.env.example`. No Vercel, cadastre-as em
 sem precisar do GitHub Actions. O botão **Verificar agora** de cada alerta
 também roda na hora (e envia os avisos).
 
-**Limites:** cada execução no Vercel tem até 60 s; o robô para de iniciar
-alertas novos perto de 40 s e os que ficaram para trás são os primeiros da
-próxima rodada. O GitHub pode atrasar execuções agendadas em alguns minutos
+**Limites:** no GitHub Actions o robô para de iniciar alertas novos depois
+de 8 min; no Vercel, cada execução tem até 60 s e o limite é 40 s. Os que
+ficaram para trás são os primeiros da próxima rodada. O GitHub pode atrasar execuções agendadas em alguns minutos
 e desativa o agendamento depois de 60 dias sem commits no repositório (basta
 reativar em *Actions*). No Telegram, cada rodada manda no máximo 10 lotes por
 alerta com foto; o restante vai resumido (o e-mail lista todos).

@@ -27,6 +27,14 @@ function getPool() {
   return pool;
 }
 
+// Lets one-shot scripts (check-alerts.js) exit instead of idling on open connections.
+export async function closePool() {
+  if (!pool) return;
+  await pool.end();
+  pool = null;
+  schemaReady = null;
+}
+
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS alerts (
   id                SERIAL PRIMARY KEY,
