@@ -32,6 +32,7 @@ export function formatPrice(price) {
 
 // ---------- Telegram ----------
 
+// `body.chat_id` overrides the default chat (TELEGRAM_CHAT_ID).
 export async function telegram(method, body) {
   const res = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/${method}`, {
     method: "POST",
@@ -61,26 +62,27 @@ export function listingCaption(item) {
 }
 
 /** Sends one listing as a photo with caption, or as text when there's no usable image. */
-export async function sendListingMessage(item, caption) {
+export async function sendListingMessage(chatId, item, caption) {
   if (item.image) {
     try {
-      await telegram("sendPhoto", { photo: item.image, caption });
+      await telegram("sendPhoto", { chat_id: chatId, photo: item.image, caption });
       return;
     } catch {
       // Telegram rejects some remote images — fall back to plain text.
     }
   }
-  await telegram("sendMessage", { text: caption, disable_web_page_preview: true });
+  await telegram("sendMessage", { chat_id: chatId, text: caption, disable_web_page_preview: true });
 }
 
-async function sendTelegram(alertName, items) {
+async function sendTelegram(chatId, alertName, items, moreHint) {
   for (const item of items.slice(0, TELEGRAM_MAX_ITEMS)) {
-    await sendListingMessage(item, telegramCaption(alertName, item));
+    await sendListingMessage(chatId, item, telegramCaption(alertName, item));
   }
   const rest = items.length - TELEGRAM_MAX_ITEMS;
   if (rest > 0) {
     await telegram("sendMessage", {
-      text: `🔔 <b>${escapeHtml(alertName)}</b>\n+ ${rest} outro(s) lote(s) novo(s). Veja todos no e-mail ou no app.`,
+      chat_id: chatId,
+      text: `🔔 <b>${escapeHtml(alertName)}</b>\n+ ${rest} outro(s) lote(s) novo(s). ${moreHint}`,
     });
   }
 }
@@ -163,10 +165,18 @@ export async function notifyNewListings(alert, items) {
   const errors = [];
   const jobs = [];
 
-  if (alert.notifyTelegram && status.telegram) {
-    jobs.push(sendTelegram(alert.name, items).catch((err) => errors.push(err.message)));
+  // Bot users' alerts go to their own chat; the owner's go to TELEGRAM_CHAT_ID
+  // and e-mail (ALERT_EMAIL_TO is the owner's address).
+  const ownedByBotUser = Boolean(alert.telegramChatId);
+  const telegramReady = ownedByBotUser ? Boolean(process.env.TELEGRAM_BOT_TOKEN) : status.telegram;
+  if (alert.notifyTelegram && telegramReady) {
+    const chatId = alert.telegramChatId ?? process.env.TELEGRAM_CHAT_ID;
+    const moreHint = ownedByBotUser
+      ? "Refine o alerta com um termo mais específico para receber menos lotes."
+      : "Veja todos no e-mail ou no app.";
+    jobs.push(sendTelegram(chatId, alert.name, items, moreHint).catch((err) => errors.push(err.message)));
   }
-  if (alert.notifyEmail && status.email) {
+  if (!ownedByBotUser && alert.notifyEmail && status.email) {
     const subject = `🔔 ${items.length} lote(s) novo(s) — ${alert.name}`;
     jobs.push(sendEmail({ subject, html: newListingsEmail(alert.name, items) }).catch((err) => errors.push(err.message)));
   }

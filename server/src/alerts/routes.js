@@ -6,6 +6,10 @@ import { channelStatus, sendTestNotification } from "./notify.js";
 
 const router = Router();
 
+// The web app (no login) only sees and edits the app owner's alerts; alerts
+// other people create through the Telegram bot stay private to their chat.
+const WEB_OWNER = null;
+
 // Express 4 doesn't catch rejected promises from async handlers.
 const handle = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
@@ -97,7 +101,7 @@ router.put(
   "/alerts/:id",
   handle(async (req, res) => {
     const id = parseId(req);
-    const current = await db.getAlert(id);
+    const current = await db.getAlert(id, WEB_OWNER);
     if (!current) return res.status(404).json({ error: "Alerta não encontrado" });
 
     const fields = parseAlertBody(req.body, { partial: true });
@@ -112,8 +116,9 @@ router.put(
 router.delete(
   "/alerts/:id",
   handle(async (req, res) => {
-    const deleted = await db.deleteAlert(parseId(req));
-    if (!deleted) return res.status(404).json({ error: "Alerta não encontrado" });
+    const alert = await db.getAlert(parseId(req), WEB_OWNER);
+    if (!alert) return res.status(404).json({ error: "Alerta não encontrado" });
+    await db.deleteAlert(alert.id);
     res.status(204).end();
   })
 );
@@ -121,7 +126,7 @@ router.delete(
 router.post(
   "/alerts/:id/check",
   handle(async (req, res) => {
-    const alert = await db.getAlert(parseId(req));
+    const alert = await db.getAlert(parseId(req), WEB_OWNER);
     if (!alert) return res.status(404).json({ error: "Alerta não encontrado" });
     const result = await checkAlert(alert);
     res.json({ ...result, alert: await db.getAlert(alert.id) });

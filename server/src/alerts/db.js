@@ -76,7 +76,22 @@ CREATE TABLE IF NOT EXISTS alert_listings (
 CREATE INDEX IF NOT EXISTS alert_listings_finds_idx
   ON alert_listings (first_seen_at DESC)
   WHERE matched AND NOT baseline;
+
+-- Owner of alerts created by other people through the Telegram bot. NULL =
+-- the app owner's alerts (web app and TELEGRAM_CHAT_ID): shown in the web app,
+-- notified to TELEGRAM_CHAT_ID and by e-mail.
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT;
+CREATE INDEX IF NOT EXISTS alerts_telegram_chat_idx ON alerts (telegram_chat_id);
+
+-- Per-chat rate limit for bot searches (they're slow and hit external sites).
+CREATE TABLE IF NOT EXISTS bot_usage (
+  chat_id        TEXT PRIMARY KEY,
+  last_search_at TIMESTAMPTZ NOT NULL
+);
 `;
+
+// Alerts are scoped by owner: null = the app owner, otherwise a Telegram chat id.
+const OWNER_FILTER = "telegram_chat_id IS NOT DISTINCT FROM";
 
 export async function query(text, params) {
   const p = getPool();
@@ -110,6 +125,7 @@ function toAlert(row) {
     lastError: row.last_error,
     lastNewCount: row.last_new_count,
     findsCount: row.finds_count === undefined ? undefined : Number(row.finds_count),
+    telegramChatId: row.telegram_chat_id,
   };
 }
 
@@ -147,20 +163,31 @@ const ALERT_COLUMNS = {
   active: "active",
 };
 
-export async function listAlerts() {
-  const { rows } = await query(`
-    SELECT a.*, COUNT(l.listing_id) FILTER (WHERE l.matched AND NOT l.baseline) AS finds_count
-    FROM alerts a
-    LEFT JOIN alert_listings l ON l.alert_id = a.id
-    GROUP BY a.id
-    ORDER BY a.created_at DESC
-  `);
+export async function listAlerts({ owner = null } = {}) {
+  const { rows } = await query(
+    `SELECT a.*, COUNT(l.listing_id) FILTER (WHERE l.matched AND NOT l.baseline) AS finds_count
+     FROM alerts a
+     LEFT JOIN alert_listings l ON l.alert_id = a.id
+     WHERE a.${OWNER_FILTER} $1
+     GROUP BY a.id
+     ORDER BY a.created_at DESC`,
+    [owner]
+  );
   return rows.map(toAlert);
 }
 
-export async function getAlert(id) {
-  const { rows } = await query("SELECT * FROM alerts WHERE id = $1", [id]);
+/** With `owner` (null or a chat id), returns the alert only if it belongs to them. */
+export async function getAlert(id, owner) {
+  const { rows } =
+    owner === undefined
+      ? await query("SELECT * FROM alerts WHERE id = $1", [id])
+      : await query(`SELECT * FROM alerts WHERE id = $1 AND ${OWNER_FILTER} $2`, [id, owner]);
   return rows[0] ? toAlert(rows[0]) : null;
+}
+
+export async function countAlerts(owner) {
+  const { rows } = await query(`SELECT COUNT(*)::int AS n FROM alerts WHERE ${OWNER_FILTER} $1`, [owner]);
+  return rows[0].n;
 }
 
 export async function listActiveAlerts() {
@@ -172,11 +199,11 @@ export async function listActiveAlerts() {
   return rows.map(toAlert);
 }
 
-export async function createAlert(fields) {
+export async function createAlert(fields, { owner = null } = {}) {
   const keys = Object.keys(fields).filter((k) => ALERT_COLUMNS[k]);
-  const cols = keys.map((k) => ALERT_COLUMNS[k]);
-  const values = keys.map((k) => fields[k]);
-  const placeholders = keys.map((_, i) => `$${i + 1}`);
+  const cols = [...keys.map((k) => ALERT_COLUMNS[k]), "telegram_chat_id"];
+  const values = [...keys.map((k) => fields[k]), owner];
+  const placeholders = cols.map((_, i) => `$${i + 1}`);
   const { rows } = await query(
     `INSERT INTO alerts (${cols.join(", ")}) VALUES (${placeholders.join(", ")}) RETURNING *`,
     values
@@ -245,15 +272,30 @@ export async function recordCheck(alertId, { baselinedSources, lastError, newCou
   );
 }
 
-export async function listFinds({ alertId = null, limit = 60 } = {}) {
+export async function listFinds({ alertId = null, limit = 60, owner = null } = {}) {
   const { rows } = await query(
     `SELECT l.*, a.name AS alert_name
      FROM alert_listings l
      JOIN alerts a ON a.id = l.alert_id
      WHERE l.matched AND NOT l.baseline AND ($1::int IS NULL OR l.alert_id = $1::int)
+       AND a.${OWNER_FILTER} $3
      ORDER BY l.first_seen_at DESC
      LIMIT $2`,
-    [alertId, limit]
+    [alertId, limit, owner]
   );
   return rows.map(toFind);
+}
+
+/**
+ * Rate limit for bot searches: records a search for `chatId` unless the last
+ * one was less than `cooldownSeconds` ago. Returns false when throttled.
+ */
+export async function claimSearchSlot(chatId, cooldownSeconds) {
+  const { rowCount } = await query(
+    `INSERT INTO bot_usage (chat_id, last_search_at) VALUES ($1, NOW())
+     ON CONFLICT (chat_id) DO UPDATE SET last_search_at = NOW()
+     WHERE bot_usage.last_search_at < NOW() - make_interval(secs => $2)`,
+    [String(chatId), cooldownSeconds]
+  );
+  return rowCount > 0;
 }

@@ -13,6 +13,8 @@ const ALERT_RESULT_LIMIT = 60;
 const RUN_BUDGET_MS = 40_000;
 const CONCURRENCY = 2;
 
+const UNREACHABLE_CHAT = /bot was blocked|user is deactivated|chat not found/i;
+
 export function matchesAlert(alert, item) {
   const title = normalize(item.title);
   if (alert.onlyWatches && !isLikelyWatch(item.title)) return false;
@@ -68,6 +70,12 @@ export async function checkAlert(alert, { notify = true } = {}) {
 
   const notifyErrors = notify && newMatches.length > 0 ? await notifyNewListings(alert, newMatches) : [];
   const errors = [...sourceErrors, ...notifyErrors];
+
+  // A bot user who blocked the bot (or deleted their account) can't be
+  // reached anymore: pause instead of failing on every run.
+  if (alert.telegramChatId && notifyErrors.some((e) => UNREACHABLE_CHAT.test(e))) {
+    await db.updateAlert(alert.id, { active: false });
+  }
 
   await db.recordCheck(alert.id, {
     baselinedSources: [...baselined],

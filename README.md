@@ -132,7 +132,8 @@ Telegram em [CONFIGURACAO.md](CONFIGURACAO.md).
 5. Na tela **Alertas**, use **Enviar teste** para confirmar e-mail e Telegram.
 6. **Bot interativo (opcional):** com o app no Vercel, o bot também responde
    `/buscar rolex submariner` com os lotes na hora e cria alertas com um
-   toque. Configuração do webhook em [TELEGRAM_BOT.md](TELEGRAM_BOT.md).
+   toque. É público: qualquer pessoa pode usar e ter os próprios alertas.
+   Configuração do webhook em [TELEGRAM_BOT.md](TELEGRAM_BOT.md).
 
 **Rodando localmente:** com `DATABASE_URL` no `server/.env`, defina
 `ALERTS_INTERVAL_MINUTES=15` para o próprio servidor verificar os alertas

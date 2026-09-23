@@ -54,6 +54,7 @@ try {
   await call("setMyCommands", {
     commands: [
       { command: "buscar", description: "Buscar lotes — ex: /buscar rolex submariner até 50000" },
+      { command: "alertas", description: "Ver, pausar e excluir seus alertas" },
       { command: "sobre", description: "O que é o Watch Tracker e como a busca funciona" },
       { command: "informacoes", description: "Tempo de resposta, avisos e erros" },
       { command: "ajuda", description: "Como usar o bot" },
