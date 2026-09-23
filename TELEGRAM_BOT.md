@@ -92,7 +92,24 @@ Sem erros registrados.
 Pronto! Mande /ajuda para o bot.
 ```
 
-O script também cadastra o menu de comandos (o botão `/` do chat).
+O script também cadastra o menu de comandos (o botão `/` do chat) e o perfil
+do bot: nome, descrição curta (página do bot e prévias de link) e descrição
+(tela "O que este bot pode fazer?", antes da primeira mensagem). Os textos
+ficam no começo de `server/src/telegram/setup.js`: para mudar, edite lá e rode
+o script de novo.
+
+### Ajustes pelo @BotFather
+
+Algumas coisas a API não permite mudar; faça direto no
+[@BotFather](https://t.me/BotFather):
+
+| Comando | Para quê |
+| --- | --- |
+| `/setuserpic` | Foto de perfil do bot (imagem quadrada, de pelo menos 512×512). |
+| `/setjoingroups` → **Disable** | Impede que adicionem o bot a grupos. Recomendado: ele só atende o seu chat. |
+
+O **username** (`@..._bot`) não pode ser trocado depois de criado; para outro
+username, é preciso criar um bot novo.
 
 ### 4. Testar
 
