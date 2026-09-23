@@ -1,0 +1,16 @@
+{
+  "name": "watch-tracker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n server,client -c green,blue \"npm run dev --workspace=server\" \"npm run dev --workspace=client\""
+  },
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
