@@ -1,11 +1,11 @@
 # Robô de alertas: roda a verificação direto no runner do GitHub (sem passar
-# pelo Vercel), a cada 15 minutos, todos os dias. Configuração em
+# pelo Vercel), a cada 2 horas, todos os dias. Configuração em
 # GITHUB_ACTIONS.md.
 name: Check alerts
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "0 */2 * * *"
   workflow_dispatch:
 
 # Uma execução por vez: se uma rodada atrasar, a próxima espera em vez de

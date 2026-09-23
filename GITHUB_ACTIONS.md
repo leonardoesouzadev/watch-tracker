@@ -1,6 +1,6 @@
 # Robô de alertas no GitHub Actions
 
-O GitHub Actions roda a verificação dos alertas a cada **15 minutos, todos os
+O GitHub Actions roda a verificação dos alertas a cada **2 horas, todos os
 dias**, direto nos servidores do GitHub. Ele não depende do Vercel nem do seu
 computador ligado: conecta no banco (Supabase), busca os lotes novos e envia os
 avisos pelo Telegram e por e-mail.
@@ -41,7 +41,7 @@ ou no fim.
 
 ## 2. Rodar pela primeira vez (manualmente)
 
-Não precisa esperar os 15 minutos para saber se está tudo certo:
+Não precisa esperar as 2 horas para saber se está tudo certo:
 
 1. Abra a aba **Actions** do repositório.
 2. Na lista da esquerda, clique em **Check alerts**.
@@ -64,7 +64,8 @@ a conexão com o banco funcionou.
 
 ## 3. Como funciona o agendamento
 
-- **Frequência:** `*/15 * * * *`, ou seja, a cada 15 minutos, todos os dias.
+- **Frequência:** `0 */2 * * *`, ou seja, a cada 2 horas, todos os dias, nas
+  horas pares em UTC (em Brasília: 1h, 3h, 5h, ..., 23h).
 - **Uma execução por vez:** se uma rodada demorar, a próxima espera em vez de
   verificar os mesmos alertas em paralelo.
 - **Limite por rodada:** o script para de iniciar alertas novos depois de 8
@@ -72,7 +73,8 @@ a conexão com o banco funcionou.
   primeiros da rodada seguinte.
 - **Custo:** o repositório é público, então os minutos do GitHub Actions são
   gratuitos e ilimitados. Se ele virar privado, o plano gratuito tem 2.000
-  minutos por mês, e rodar a cada 15 minutos passa disso (veja a seção 4).
+  minutos por mês; rodar a cada 2 horas usa cerca de 360 por mês, bem dentro
+  do limite.
 
 ### Atrasos são normais
 
@@ -97,6 +99,7 @@ sempre em **UTC** (Brasília = UTC − 3).
 | A cada 15 minutos | `"*/15 * * * *"` |
 | A cada 30 minutos | `"*/30 * * * *"` |
 | A cada hora | `"0 * * * *"` |
+| A cada 2 horas (atual) | `"0 */2 * * *"` |
 | Uma vez por dia, às 8h de Brasília | `"0 11 * * *"` |
 
 O GitHub não aceita intervalos menores que 5 minutos.

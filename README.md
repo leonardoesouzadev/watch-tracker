@@ -32,7 +32,7 @@ novos desde a última busca.
 - **Busca manual sem banco:** palavras-chave e histórico de anúncios já
   vistos da tela de busca ficam no `localStorage` do navegador.
 - **Alertas (robô):** a tela **Alertas** salva parâmetros no servidor
-  (Postgres). O GitHub Actions roda o robô a cada 15 min, que faz a busca
+  (Postgres). O GitHub Actions roda o robô a cada 2 h, que faz a busca
   de cada alerta ativo e avisa por **e-mail** e **Telegram** quando aparece
   um lote que ainda não tinha sido visto. Ver [Alertas](#alertas).
 - **Backend mínimo:** Node/Express. Cada fonte é um arquivo em
@@ -52,7 +52,7 @@ server/
   src/scrapers/miltonsayegh.js       Scraper do Milton Sayegh Leilões (cheerio)
   src/scrapers/sothebys.js           Cliente do índice Algolia embutido na busca da Sotheby's
 shared/                              Código usado pelo cliente e pelo servidor (filtro de relógios, fontes)
-.github/workflows/check-alerts.yml   Agendador: roda o robô a cada 15 min no GitHub Actions
+.github/workflows/check-alerts.yml   Agendador: roda o robô a cada 2 h no GitHub Actions
 ```
 
 ## 1. Configurar o servidor
@@ -96,7 +96,7 @@ título — e o robô avisa quando um lote novo que bate com eles aparece.
 
 **Como o robô decide o que é "novo":** os sites não informam quando um lote
 foi cadastrado, então vale a data em que o robô viu o lote pela primeira vez
-(precisão = intervalo do agendador, 15 min). Ao criar um alerta, tudo o que
+(precisão = intervalo do agendador, 2 h). Ao criar um alerta, tudo o que
 já está em leilão é registrado sem aviso; depois disso só chega aviso do que
 aparecer. Todos os lotes retornados ficam guardados (não só os que batem com
 os filtros), então afrouxar um filtro depois não reenvia lote antigo. Mudar o
@@ -122,7 +122,7 @@ Telegram em [CONFIGURACAO.md](CONFIGURACAO.md).
    aparece vai em `TELEGRAM_CHAT_ID` (para um grupo, adicione o bot ao grupo;
    o id começa com `-`).
 4. **Agendador:** o workflow `check-alerts.yml` roda o robô direto no GitHub
-   Actions a cada 15 min, todos os dias, sem depender do Vercel. Cadastre as
+   Actions a cada 2 h, todos os dias, sem depender do Vercel. Cadastre as
    variáveis acima como secrets em *Settings → Secrets and variables →
    Actions* — passo a passo em [GITHUB_ACTIONS.md](GITHUB_ACTIONS.md). Dá pra
    disparar na mão em *Actions → Check alerts → Run workflow*. O `vercel.json`

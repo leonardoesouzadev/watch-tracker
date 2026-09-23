@@ -162,7 +162,7 @@ ALERTS_INTERVAL_MINUTES=15
 
 ## 4. Verificação automática no GitHub
 
-Para os alertas rodarem sozinhos a cada 15 minutos, sem depender do seu
+Para os alertas rodarem sozinhos a cada 2 horas, sem depender do seu
 computador ou do Vercel, siga o [GITHUB_ACTIONS.md](GITHUB_ACTIONS.md).
 
 ## 5. Publicar no Vercel
