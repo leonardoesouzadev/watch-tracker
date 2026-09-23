@@ -157,6 +157,10 @@ alerta com foto; o restante vai resumido (o e-mail lista todos).
 6. Clicar num card leva para a página do lote/edital na fonte original.
 7. Na seção **Fontes**, desligue o interruptor de qualquer fonte pra excluí-la
    das buscas (e do que aparece na tela) sem precisar removê-la.
+8. O sino no canto da foto de cada card abre um **alerta já preenchido** com o
+   modelo daquele lote (o termo sai do título, sem "Lote", "Relógio" etc., e
+   dá pra ajustar antes de salvar). O alerta avisa sobre outros lotes novos
+   desse modelo — não acompanha os lances do lote do card.
 
 ## Limitações do MVP / próximos passos
 

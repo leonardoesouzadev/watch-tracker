@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import type { KeywordState } from '../types'
+import type { AlertInput, KeywordState, Listing } from '../types'
 import { ListingCard } from './ListingCard'
 import { SOURCE_LABEL } from '../sourceLabels'
 import { isLikelyWatch } from '../watchFilter'
 import { normalize } from '../normalize'
+import { createAlert } from '../alertsApi'
 import { Toggle } from './Toggle'
+import { AlertForm } from './AlertForm'
 import { SearchIcon, CheckIcon, WatchIcon } from './icons'
 import { Combobox } from './Combobox'
 
@@ -26,6 +28,21 @@ const SORT_LABEL_TO_ORDER: Record<string, SortOrder> = {
   Relevância: 'none',
   'Menor preço': 'price-asc',
   'Maior preço': 'price-desc',
+}
+
+// Listing titles are long ("Lote 12 - Relógio Rolex Submariner Date 116610LN
+// em aço, caixa 40mm..."): the alert search term keeps only the first few
+// words after dropping auction and generic watch words, so it still matches
+// other listings of the same model. The user can edit it in the form.
+const ALERT_QUERY_MAX_WORDS = 5
+const ALERT_QUERY_NOISE = /\b(lote|lot)\s*(n[º°o.]?\s*)?\d*\b|\b(rel[oó]gios?|watch|de pulso)\b|[-–—:|,;()]/gi
+
+const TRAILING_STOPWORDS = new Set(['em', 'de', 'do', 'da', 'com', 'e', 'para', 'a', 'o'])
+
+function alertQueryFromTitle(title: string): string {
+  const words = title.replace(ALERT_QUERY_NOISE, ' ').split(/\s+/).filter(Boolean).slice(0, ALERT_QUERY_MAX_WORDS)
+  while (words.length > 1 && TRAILING_STOPWORDS.has(words[words.length - 1].toLowerCase())) words.pop()
+  return words.join(' ')
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
@@ -58,10 +75,18 @@ export function ResultsPanel({ keyword, state }: Props) {
   const [onlyNew, setOnlyNew] = useState(false)
   const [titleQuery, setTitleQuery] = useState('')
   const [hiddenSources, setHiddenSources] = useState<Set<string>>(new Set())
+  const [alertDraft, setAlertDraft] = useState<Partial<AlertInput> | null>(null)
+  const [createdAlert, setCreatedAlert] = useState<string | null>(null)
 
   useEffect(() => {
     setPage(1)
   }, [keyword, state?.data])
+
+  useEffect(() => {
+    if (!createdAlert) return
+    const id = setTimeout(() => setCreatedAlert(null), 8000)
+    return () => clearTimeout(id)
+  }, [createdAlert])
 
   useEffect(() => {
     setPage(1)
@@ -114,6 +139,16 @@ export function ResultsPanel({ keyword, state }: Props) {
     })
   }
 
+  function openAlertDraft(listing: Listing) {
+    setAlertDraft({ query: alertQueryFromTitle(listing.title) || (keyword ?? ''), onlyWatches: true, sources: null })
+  }
+
+  async function handleCreateAlert(input: AlertInput) {
+    const created = await createAlert(input)
+    setAlertDraft(null)
+    setCreatedAlert(created.name)
+  }
+
   function clearFilters() {
     setOnlyWatches(true)
     setOnlyNew(false)
@@ -147,6 +182,19 @@ export function ResultsPanel({ keyword, state }: Props) {
           </p>
         )}
       </header>
+
+      {createdAlert && (
+        <p
+          role="status"
+          className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-xl border border-success/20 bg-success-soft px-4 py-3 text-sm text-success"
+        >
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden />
+          Alerta “{createdAlert}” criado. O robô passa a avisar sobre lotes novos.
+          <a href="#alertas" className="font-medium underline underline-offset-2">
+            Ver alertas
+          </a>
+        </p>
+      )}
 
       {allItems.length > 0 && (
         <div className="card flex flex-col gap-5 p-5">
@@ -254,7 +302,12 @@ export function ResultsPanel({ keyword, state }: Props) {
 
       <div className="grid grid-cols-1 gap-5 min-[420px]:grid-cols-2 sm:grid-cols-3 sm:gap-6 lg:grid-cols-4 2xl:grid-cols-5">
         {pageItems.map((item) => (
-          <ListingCard key={item.id} listing={item} isNew={state?.newIds.has(item.id) ?? false} />
+          <ListingCard
+            key={item.id}
+            listing={item}
+            isNew={state?.newIds.has(item.id) ?? false}
+            onCreateAlert={openAlertDraft}
+          />
         ))}
       </div>
 
@@ -283,6 +336,10 @@ export function ResultsPanel({ keyword, state }: Props) {
             Próxima →
           </button>
         </nav>
+      )}
+
+      {alertDraft && (
+        <AlertForm initial={alertDraft} onSubmit={handleCreateAlert} onClose={() => setAlertDraft(null)} />
       )}
     </div>
   )

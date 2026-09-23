@@ -8,6 +8,8 @@ import { CheckIcon, XIcon } from './icons'
 interface Props {
   /** Alert being edited; omit to create a new one. */
   alert?: Alert
+  /** Prefilled values for a new alert (e.g. from the current search). */
+  initial?: Partial<AlertInput>
   onSubmit: (input: AlertInput) => Promise<void>
   onClose: () => void
 }
@@ -19,17 +21,18 @@ function splitTerms(text: string): string[] {
     .filter(Boolean)
 }
 
-export function AlertForm({ alert, onSubmit, onClose }: Props) {
-  const [query, setQuery] = useState(alert?.query ?? '')
+export function AlertForm({ alert, initial, onSubmit, onClose }: Props) {
+  const values = alert ?? initial
+  const [query, setQuery] = useState(values?.query ?? '')
   const [name, setName] = useState(alert && alert.name !== alert.query ? alert.name : '')
-  const [minPrice, setMinPrice] = useState(alert?.minPrice?.toString() ?? '')
-  const [maxPrice, setMaxPrice] = useState(alert?.maxPrice?.toString() ?? '')
-  const [includeTerms, setIncludeTerms] = useState(alert?.includeTerms.join(', ') ?? '')
-  const [excludeTerms, setExcludeTerms] = useState(alert?.excludeTerms.join(', ') ?? '')
+  const [minPrice, setMinPrice] = useState(values?.minPrice?.toString() ?? '')
+  const [maxPrice, setMaxPrice] = useState(values?.maxPrice?.toString() ?? '')
+  const [includeTerms, setIncludeTerms] = useState(values?.includeTerms?.join(', ') ?? '')
+  const [excludeTerms, setExcludeTerms] = useState(values?.excludeTerms?.join(', ') ?? '')
   const [sources, setSources] = useState<Set<string>>(
-    () => new Set(alert?.sources ?? BUILT_IN_SOURCES.map((s) => s.id))
+    () => new Set(values?.sources ?? BUILT_IN_SOURCES.map((s) => s.id))
   )
-  const [onlyWatches, setOnlyWatches] = useState(alert?.onlyWatches ?? true)
+  const [onlyWatches, setOnlyWatches] = useState(values?.onlyWatches ?? true)
   const [notifyEmail, setNotifyEmail] = useState(alert?.notifyEmail ?? true)
   const [notifyTelegram, setNotifyTelegram] = useState(alert?.notifyTelegram ?? true)
   const [active, setActive] = useState(alert?.active ?? true)

@@ -15,7 +15,7 @@ import { ListingCard } from './ListingCard'
 import { BellIcon, MailIcon, PlusIcon, SendIcon, XIcon } from './icons'
 
 // Keep in sync with .github/workflows/check-alerts.yml.
-const CHECK_EVERY_MINUTES = 15
+const CHECK_EVERY_HOURS = 2
 
 type FormState = { mode: 'create' } | { mode: 'edit'; alert: Alert } | null
 type Notice = { tone: 'ok' | 'error'; text: string } | null
@@ -184,7 +184,7 @@ export function AlertsPanel() {
           <span className="eyebrow text-fg-muted">Monitoramento</span>
           <h2 className="text-2xl font-semibold tracking-tight text-fg sm:text-[28px]">Alertas</h2>
           <p className="max-w-xl text-sm text-fg-secondary">
-            O robô verifica os alertas ativos a cada {CHECK_EVERY_MINUTES} min e avisa por e-mail e Telegram quando um
+            O robô verifica os alertas ativos a cada {CHECK_EVERY_HOURS} horas e avisa por e-mail e Telegram quando um
             lote novo aparece.
           </p>
         </div>
