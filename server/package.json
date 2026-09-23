@@ -7,9 +7,11 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "check-alerts": "node src/check-alerts.js"
+    "check-alerts": "node src/check-alerts.js",
+    "telegram:setup": "node src/telegram/setup.js"
   },
   "dependencies": {
+    "@vercel/functions": "^3.9.9",
     "cheerio": "^1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

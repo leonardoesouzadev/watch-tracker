@@ -3,6 +3,12 @@ import express from "express";
 import cors from "cors";
 import { runSearch, SOURCES } from "./search.js";
 import alertRoutes from "./alerts/routes.js";
+import telegramRoutes from "./telegram/routes.js";
+
+// LeilõesBR's search can take 30–80 s to answer. Vercel kills the function at
+// 60 s (vercel.json), which would lose every source; give up on slow ones
+// before that so the rest still comes back.
+const SEARCH_TIMEOUT_MS = 50_000;
 
 const app = express();
 
@@ -22,10 +28,11 @@ app.post("/api/search", async (req, res) => {
   const limit = Number(req.body?.limit) || 30;
   const sources = Array.isArray(req.body?.sources) ? req.body.sources : Object.keys(SOURCES);
 
-  res.json(await runSearch({ query, limit, sources }));
+  res.json(await runSearch({ query, limit, sources, timeoutMs: SEARCH_TIMEOUT_MS }));
 });
 
 app.use("/api", alertRoutes);
+app.use("/api", telegramRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {

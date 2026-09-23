@@ -11,7 +11,7 @@ export function channelStatus() {
   };
 }
 
-function escapeHtml(text) {
+export function escapeHtml(text) {
   return String(text ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -32,7 +32,7 @@ export function formatPrice(price) {
 
 // ---------- Telegram ----------
 
-async function telegram(method, body) {
+export async function telegram(method, body) {
   const res = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -45,8 +45,12 @@ async function telegram(method, body) {
 }
 
 function telegramCaption(alertName, item) {
+  return `🔔 <b>${escapeHtml(alertName)}</b>\n${listingCaption(item)}`;
+}
+
+/** Title, price, source, location and link of one listing (Telegram HTML). */
+export function listingCaption(item) {
   return [
-    `🔔 <b>${escapeHtml(alertName)}</b>`,
     escapeHtml(item.title),
     `<b>${escapeHtml(formatPrice(item.price))}</b> · ${escapeHtml(SOURCE_LABEL[item.source] ?? item.source)}`,
     item.location ? escapeHtml(item.location) : null,
@@ -56,18 +60,22 @@ function telegramCaption(alertName, item) {
     .join("\n");
 }
 
+/** Sends one listing as a photo with caption, or as text when there's no usable image. */
+export async function sendListingMessage(item, caption) {
+  if (item.image) {
+    try {
+      await telegram("sendPhoto", { photo: item.image, caption });
+      return;
+    } catch {
+      // Telegram rejects some remote images — fall back to plain text.
+    }
+  }
+  await telegram("sendMessage", { text: caption, disable_web_page_preview: true });
+}
+
 async function sendTelegram(alertName, items) {
   for (const item of items.slice(0, TELEGRAM_MAX_ITEMS)) {
-    const caption = telegramCaption(alertName, item);
-    if (item.image) {
-      try {
-        await telegram("sendPhoto", { photo: item.image, caption });
-        continue;
-      } catch {
-        // Telegram rejects some remote images — fall back to plain text.
-      }
-    }
-    await telegram("sendMessage", { text: caption, disable_web_page_preview: true });
+    await sendListingMessage(item, telegramCaption(alertName, item));
   }
   const rest = items.length - TELEGRAM_MAX_ITEMS;
   if (rest > 0) {

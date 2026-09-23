@@ -12,15 +12,25 @@ export const SOURCES = {
   sothebys: searchSothebys,
 };
 
+function withTimeout(promise, ms) {
+  if (!ms) return promise;
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("tempo esgotado")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 /**
  * Runs the query against the requested sources in parallel. A failing source
  * never fails the whole search — its error is reported in `sources`.
+ * `timeoutMs` gives up on sources slower than that (reported as an error).
  */
-export async function runSearch({ query, limit = 30, sources = Object.keys(SOURCES) }) {
+export async function runSearch({ query, limit = 30, sources = Object.keys(SOURCES), timeoutMs = 0 }) {
   const tasks = sources
     .filter((name) => SOURCES[name])
     .map((name) =>
-      SOURCES[name]({ query, limit })
+      withTimeout(SOURCES[name]({ query, limit }), timeoutMs)
         .then((r) => [name, r])
         .catch((err) => [name, err])
     );

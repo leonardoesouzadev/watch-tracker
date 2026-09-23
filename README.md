@@ -47,6 +47,7 @@ server/
   src/search.js                      Agrega os scrapers
   src/alerts/                        Alertas: banco (db), robô (checker), avisos (notify), rotas
   src/check-alerts.js                Roda o robô uma vez (usado pelo GitHub Actions)
+  src/telegram/                      Bot do Telegram: webhook, /buscar e registro (setup)
   src/scrapers/leiloesbr.js          Scraper do LeilõesBR (cheerio)
   src/scrapers/receitaFederal.js     Cliente da API do Leilão Eletrônico da Receita Federal
   src/scrapers/miltonsayegh.js       Scraper do Milton Sayegh Leilões (cheerio)
@@ -129,6 +130,9 @@ Telegram em [CONFIGURACAO.md](CONFIGURACAO.md).
    também registra um cron diário do Vercel (chama `/api/cron/check-alerts`,
    protegido por `CRON_SECRET`) como rede de segurança.
 5. Na tela **Alertas**, use **Enviar teste** para confirmar e-mail e Telegram.
+6. **Bot interativo (opcional):** com o app no Vercel, o bot também responde
+   `/buscar rolex submariner` com os lotes na hora e cria alertas com um
+   toque. Configuração do webhook em [TELEGRAM_BOT.md](TELEGRAM_BOT.md).
 
 **Rodando localmente:** com `DATABASE_URL` no `server/.env`, defina
 `ALERTS_INTERVAL_MINUTES=15` para o próprio servidor verificar os alertas

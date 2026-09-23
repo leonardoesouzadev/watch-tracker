@@ -134,7 +134,12 @@ mensagem para o bot e atualize a página.
 3. Repita o passo 2.2. O ID de grupo começa com `-` (por exemplo,
    `-1001234567890`): copie com o sinal de menos.
 
-### 2.4 Se o token vazar
+### 2.4 Busca pelo chat (opcional)
+
+Para o bot também responder comandos como `/buscar rolex submariner`, siga o
+[TELEGRAM_BOT.md](TELEGRAM_BOT.md) depois de publicar o app no Vercel.
+
+### 2.5 Se o token vazar
 
 Mande `/revoke` para o @BotFather, escolha o bot e ele gera um token novo.
 Atualize o `TELEGRAM_BOT_TOKEN` no `.env` (e no Vercel, se já estiver
