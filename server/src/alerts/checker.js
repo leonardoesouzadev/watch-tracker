@@ -12,6 +12,11 @@ const ALERT_RESULT_LIMIT = 60;
 // new alerts past this budget; the skipped ones are first in line next run.
 const RUN_BUDGET_MS = 40_000;
 const CONCURRENCY = 2;
+// A source slower than this is skipped for that check (reported in the alert's
+// last error) instead of stalling the run — LeilõesBR can hang for minutes.
+// The default fits Vercel's 60 s limit; the GitHub Actions runner passes more.
+// A skipped source isn't baselined, so it can't cause false "new" notices.
+const SOURCE_TIMEOUT_MS = 45_000;
 
 const UNREACHABLE_CHAT = /bot was blocked|user is deactivated|chat not found/i;
 
@@ -40,9 +45,9 @@ export function matchesAlert(alert, item) {
  * in auction. Every listing ever returned is stored — not just matches — so
  * loosening a filter later doesn't resurface old lots as "new".
  */
-export async function checkAlert(alert, { notify = true } = {}) {
+export async function checkAlert(alert, { notify = true, sourceTimeoutMs = SOURCE_TIMEOUT_MS } = {}) {
   const sources = alert.sources?.length ? alert.sources : Object.keys(SOURCES);
-  const result = await runSearch({ query: alert.query, limit: ALERT_RESULT_LIMIT, sources });
+  const result = await runSearch({ query: alert.query, limit: ALERT_RESULT_LIMIT, sources, timeoutMs: sourceTimeoutMs });
 
   const seen = await db.getSeenListingIds(alert.id);
   const baselined = new Set(alert.baselinedSources);
@@ -90,7 +95,7 @@ export async function checkAlert(alert, { notify = true } = {}) {
  * Checks every active alert, within the time budget (serverless by default;
  * the GitHub Actions runner passes a larger one).
  */
-export async function checkAllAlerts({ budgetMs = RUN_BUDGET_MS } = {}) {
+export async function checkAllAlerts({ budgetMs = RUN_BUDGET_MS, sourceTimeoutMs = SOURCE_TIMEOUT_MS } = {}) {
   const startedAt = Date.now();
   const queue = await db.listActiveAlerts();
   const results = [];
@@ -105,7 +110,7 @@ export async function checkAllAlerts({ budgetMs = RUN_BUDGET_MS } = {}) {
       }
       const alert = queue.shift();
       try {
-        results.push(await checkAlert(alert));
+        results.push(await checkAlert(alert, { sourceTimeoutMs }));
       } catch (err) {
         console.error(`[alert ${alert.id}]`, err);
         results.push({ alertId: alert.id, newCount: 0, errors: [err.message] });

@@ -6,6 +6,8 @@ import { closePool, isDatabaseConfigured } from "./alerts/db.js";
 // (.github/workflows/check-alerts.yml) so alerts don't depend on Vercel.
 // Runs outside the serverless time limit, so it gets a larger budget.
 const BUDGET_MS = 8 * 60 * 1000;
+// LeilõesBR answers in 30–80 s when it's up; past this it's hanging.
+const SOURCE_TIMEOUT_MS = 90_000;
 
 if (!isDatabaseConfigured()) {
   console.error("DATABASE_URL não configurada");
@@ -13,7 +15,7 @@ if (!isDatabaseConfigured()) {
 }
 
 try {
-  const r = await checkAllAlerts({ budgetMs: BUDGET_MS });
+  const r = await checkAllAlerts({ budgetMs: BUDGET_MS, sourceTimeoutMs: SOURCE_TIMEOUT_MS });
   console.log(`[alerts] ${r.checked} checked, ${r.skipped} skipped, ${r.newListings} new, ${r.durationMs}ms`);
   for (const result of r.results) {
     const errors = result.errors.length ? ` — erros: ${result.errors.join(" | ")}` : "";

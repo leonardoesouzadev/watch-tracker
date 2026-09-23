@@ -71,6 +71,11 @@ a conexão com o banco funcionou.
 - **Limite por rodada:** o script para de iniciar alertas novos depois de 8
   minutos, e o job é encerrado em 10. Os alertas que ficarem para trás são os
   primeiros da rodada seguinte.
+- **Limite por fonte:** cada site tem até 90 segundos para responder. Se
+  travar (o LeilõesBR às vezes fica minutos sem responder), ele fica de fora
+  daquela verificação, com o erro `tempo esgotado`, e é tentado de novo na
+  próxima. Isso não gera avisos falsos: os lotes dele só contam como "novos"
+  depois que ele responde.
 - **Custo:** o repositório é público, então os minutos do GitHub Actions são
   gratuitos e ilimitados. Se ele virar privado, o plano gratuito tem 2.000
   minutos por mês; rodar a cada 2 horas usa cerca de 360 por mês, bem dentro
@@ -128,5 +133,6 @@ alertas.
 | `password authentication failed` | Senha errada no `DATABASE_URL` ou caractere especial sem codificar. |
 | `alerta N: ... erros: Telegram: chat not found` | `TELEGRAM_CHAT_ID` errado, ou você não mandou mensagem para o bot antes. |
 | `alerta N: ... erros: Telegram: Unauthorized` | `TELEGRAM_BOT_TOKEN` errado ou revogado. |
-| `alerta N: ... erros: leiloesbr: ...` | A fonte falhou nessa rodada (site fora do ar ou mudou o layout). O alerta continua nas próximas. |
+| `alerta N: ... erros: leiloesbr: tempo esgotado` | O site não respondeu em 90 s nessa rodada. O alerta continua normalmente nas próximas. |
+| `alerta N: ... erros: leiloesbr: ...` (outro erro) | A fonte falhou nessa rodada (site fora do ar ou mudou o layout). O alerta continua nas próximas. |
 | Workflow não roda mais sozinho | Desativado após 60 dias sem commits (veja a seção 3). |
