@@ -16,6 +16,8 @@ const RESULTS_SHOWN = 5;
 // from the reply instead of losing the whole search. Leaves ~10 s to send the
 // results.
 const SEARCH_TIMEOUT_MS = 48_000;
+// Keep in sync with .github/workflows/check-alerts.yml.
+const CHECK_EVERY_HOURS = 2;
 // Telegram caps callback_data at 64 bytes.
 const CALLBACK_DATA_MAX_BYTES = 64;
 
@@ -29,7 +31,63 @@ const HELP_TEXT = [
   "<code>omega speedmaster até 30000</code>",
   "",
   "No fim de cada busca, o botão <b>🔔 Criar alerta</b> transforma a busca em um alerta: você passa a ser avisado dos lotes novos.",
+  "",
+  "<b>Comandos</b>",
+  "/buscar — buscar lotes",
+  "/sobre — o que é o Watch Tracker e como a busca funciona",
+  "/informacoes — tempo de resposta, avisos e erros",
+  "/ajuda — esta mensagem",
 ].join("\n");
+
+const ABOUT_TEXT = [
+  "⌚ <b>Sobre o Watch Tracker</b>",
+  "",
+  "Monitor de leilões de relógios no Brasil. Em vez de abrir site por site, você busca uma vez e vê os lotes de todas as fontes juntos.",
+  "",
+  "<b>Onde eu busco</b>",
+  "• <b>LeilõesBR</b>: reúne o catálogo de vários leiloeiros brasileiros.",
+  "• <b>Receita Federal</b>: leilões oficiais de mercadorias apreendidas (editais abertos, categoria relógios).",
+  "• <b>Milton Sayegh</b>: leiloeiro de joias e relógios (leilões em andamento).",
+  "• <b>Sotheby's</b>: leilões internacionais que ainda vão acontecer.",
+  "",
+  "<b>Como a busca funciona</b>",
+  "• Busco o termo nas 4 fontes ao mesmo tempo.",
+  "• Mostro só o que parece relógio (pulseiras, caixas e outros itens soltos ficam de fora).",
+  "• Com <code>até 30000</code> no fim, entram só lotes com preço até esse valor.",
+  "• Envio os 5 primeiros e digo quantos encontrei no total. Para ver todos, use o app.",
+  "",
+  "<b>Alertas</b>",
+  `• O botão <b>🔔 Criar alerta</b> salva a busca. A cada ${CHECK_EVERY_HOURS} horas eu refaço a busca e aviso aqui quando aparece um lote novo.`,
+  "• Os lotes que já estão em leilão quando o alerta é criado não geram aviso: você recebe só o que aparecer depois.",
+].join("\n");
+
+const INFO_TEXT = [
+  "ℹ️ <b>Informações e erros</b>",
+  "",
+  "<b>⏱ Por que a busca demora?</b>",
+  "Cada busca consulta os 4 sites na hora. A maioria responde em poucos segundos, mas o <b>LeilõesBR</b> é lento: o site leva de 30 a 80 segundos para responder. Por isso uma busca pode levar quase 1 minuto.",
+  "",
+  "<b>⚠️ \"tempo esgotado\"</b>",
+  `Espero cada site por até ${SEARCH_TIMEOUT_MS / 1000} segundos. Se algum não responder a tempo (quase sempre o LeilõesBR), mostro os resultados dos outros e aviso qual ficou de fora. Não é erro seu: tente de novo mais tarde, ou com um termo mais específico.`,
+  "",
+  "<b>🐢 Primeira busca mais lenta</b>",
+  "A Receita Federal não tem busca por palavra: na primeira busca eu monto um índice com todos os editais abertos, o que leva mais tempo. Depois ele fica guardado por 30 minutos e as buscas seguintes são rápidas.",
+  "",
+  "<b>🔍 \"Nenhum lote encontrado\"</b>",
+  "• O modelo pode simplesmente não estar em leilão agora.",
+  "• O Milton Sayegh só tem lotes quando há um leilão em andamento.",
+  "• O preço máximo exclui lotes sem preço informado.",
+  "• Tente um termo mais curto: <code>rolex submariner</code> em vez do título completo.",
+  "",
+  "<b>🔔 Alertas</b>",
+  `• A verificação automática roda a cada ${CHECK_EVERY_HOURS} horas e pode atrasar alguns minutos.`,
+  "• Um alerta recém-criado não avisa dos lotes que já estavam em leilão.",
+  "",
+  "<b>Outros erros</b>",
+  "Uma mensagem começando com ⚠️ indica que um site falhou naquela busca (fora do ar ou mudou o layout). As outras fontes continuam funcionando; se o erro se repetir por dias, o site provavelmente mudou e a busca nele precisa ser ajustada.",
+].join("\n");
+
+const INFO_HINT = "ℹ️ Entenda os avisos: /informacoes";
 
 function appUrl() {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
@@ -102,6 +160,7 @@ async function handleSearch(text) {
       : `<b>${items.length}</b> lote(s) para ${describeSearch(query, maxPrice)}.` +
         (items.length > RESULTS_SHOWN ? ` Mostrei os ${RESULTS_SHOWN} primeiros.` : ""),
     ...failed,
+    ...(failed.length > 0 || items.length === 0 ? ["", INFO_HINT] : []),
   ].join("\n");
 
   const buttons = [];
@@ -179,9 +238,11 @@ export async function handleUpdate(update) {
 
     const [, name, args] = command;
     if (name === "buscar") return await handleSearch(args);
+    if (name === "sobre") return await telegram("sendMessage", { text: ABOUT_TEXT });
+    if (name === "informacoes") return await telegram("sendMessage", { text: INFO_TEXT });
     await telegram("sendMessage", { text: HELP_TEXT });
   } catch (err) {
     console.error("[telegram]", err);
-    await telegram("sendMessage", { text: `⚠️ Erro: ${escapeHtml(err.message)}` }).catch(() => {});
+    await telegram("sendMessage", { text: `⚠️ Erro: ${escapeHtml(err.message)}\n\n${INFO_HINT}` }).catch(() => {});
   }
 }
