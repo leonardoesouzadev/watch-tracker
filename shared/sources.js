@@ -5,6 +5,7 @@ export const BUILT_IN_SOURCES = [
   { id: 'receitafederal', name: 'Receita Federal' },
   { id: 'miltonsayegh', name: 'Milton Sayegh Leilões' },
   { id: 'sothebys', name: "Sotheby's" },
+  { id: 'mercari', name: 'Mercari Japão' },
 ]
 
 export const SOURCE_LABEL = Object.fromEntries(BUILT_IN_SOURCES.map((s) => [s.id, s.name]))

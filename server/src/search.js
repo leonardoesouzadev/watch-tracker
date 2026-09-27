@@ -2,6 +2,7 @@ import { searchLeiloesBR } from "./scrapers/leiloesbr.js";
 import { searchReceitaFederal } from "./scrapers/receitaFederal.js";
 import { searchMiltonSayegh } from "./scrapers/miltonsayegh.js";
 import { searchSothebys } from "./scrapers/sothebys.js";
+import { searchMercari } from "./scrapers/mercari.js";
 
 // Each entry is a scraper for one built-in auction site. Add more here as
 // they're built (and list them in shared/sources.js).
@@ -10,6 +11,7 @@ export const SOURCES = {
   receitafederal: searchReceitaFederal,
   miltonsayegh: searchMiltonSayegh,
   sothebys: searchSothebys,
+  mercari: searchMercari,
 };
 
 function withTimeout(promise, ms) {

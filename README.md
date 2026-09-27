@@ -27,6 +27,13 @@ novos desde a última busca.
     futuros (`pfilters.dateRange=upcoming`). O site responde com uma cadeia de
     redirects 307 que setam um cookie esperado no próximo passo; o servidor
     segue esses redirects manualmente carregando o cookie adiante.
+  - [Mercari Japão](https://jp.mercari.com/en/) — marketplace japonês de
+    usados. O site é todo renderizado no navegador; o servidor chama direto a
+    API de busca (`api.mercari.jp/v2/entities:search`), que não usa chave mas
+    exige um cabeçalho DPoP: um JWT assinado com uma chave ES256 qualquer,
+    gerada pelo próprio servidor. Traz só anúncios à venda, com preço em iene
+    (JPY). Os títulos costumam estar em japonês, por isso o filtro de relógios
+    também reconhece 時計 e ウォッチ.
 - **Filtro de fontes:** cada fonte tem um interruptor na barra lateral pra
   incluir/excluir da busca.
 - **Busca manual sem banco:** palavras-chave e histórico de anúncios já
@@ -52,6 +59,7 @@ server/
   src/scrapers/receitaFederal.js     Cliente da API do Leilão Eletrônico da Receita Federal
   src/scrapers/miltonsayegh.js       Scraper do Milton Sayegh Leilões (cheerio)
   src/scrapers/sothebys.js           Cliente do índice Algolia embutido na busca da Sotheby's
+  src/scrapers/mercari.js            Cliente da API de busca do Mercari Japão (DPoP)
 shared/                              Código usado pelo cliente e pelo servidor (filtro de relógios, fontes)
 .github/workflows/check-alerts.yml   Agendador: roda o robô a cada 2 h no GitHub Actions
 ```
