@@ -1,5 +1,6 @@
 {
   "framework": null,
+  "regions": ["gru1"],
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace=client",
   "outputDirectory": "client/dist",
