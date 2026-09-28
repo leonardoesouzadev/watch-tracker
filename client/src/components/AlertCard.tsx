@@ -16,7 +16,7 @@ interface Props {
 }
 
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })
-const relative = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' })
+const relative = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto', style: 'short' })
 
 function formatRelative(iso: string): string {
   const diffSec = (new Date(iso).getTime() - Date.now()) / 1000
@@ -34,112 +34,118 @@ function priceRange(alert: Alert): string | null {
   return min !== null ? `a partir de ${brl.format(min)}` : `até ${brl.format(max!)}`
 }
 
-function ChannelBadge({ on, configured, icon, label }: { on: boolean; configured: boolean; icon: React.ReactNode; label: string }) {
+function ChannelIcon({ on, configured, icon, label }: { on: boolean; configured: boolean; icon: React.ReactNode; label: string }) {
   const title = !on ? `${label}: desativado` : configured ? `${label}: ativo` : `${label}: não configurado no servidor`
+  const color = on && configured ? 'text-gold-deep' : on ? 'text-danger' : 'text-fg-muted/60'
   return (
-    <span
-      title={title}
-      className={`flex h-7 w-7 items-center justify-center rounded-lg border ${
-        on && configured
-          ? 'border-gold-soft bg-gold-tint text-gold-text'
-          : on
-            ? 'border-danger-border bg-danger-soft text-danger'
-            : 'border-border bg-surface-muted text-fg-muted'
-      }`}
-    >
+    <span title={title} aria-label={title} className={color}>
       {icon}
     </span>
   )
 }
 
+const iconButton = 'rounded-lg p-1.5 text-icon transition-colors disabled:pointer-events-none'
+
 export function AlertCard({ alert, config, checking, selected, onToggleActive, onCheck, onEdit, onDelete, onShowFinds }: Props) {
   const range = priceRange(alert)
-  const sources = alert.sources ? alert.sources.map((s) => SOURCE_LABEL[s] ?? s).join(', ') : 'Todas as fontes'
+  // Only what differs from the defaults (every source, only watches) gets a tag.
+  const tags = [
+    range && { key: 'price', text: range },
+    alert.reference && { key: 'ref', text: `Ref. ${alert.reference}` },
+    alert.sources && {
+      key: 'sources',
+      text: alert.sources.length === 1 ? (SOURCE_LABEL[alert.sources[0]] ?? alert.sources[0]) : `${alert.sources.length} fontes`,
+      title: alert.sources.map((s) => SOURCE_LABEL[s] ?? s).join(', '),
+    },
+    !alert.onlyWatches && { key: 'all', text: 'Inclui não relógios' },
+    alert.digest && { key: 'digest', text: 'Resumo diário' },
+    alert.hideSuspicious && { key: 'susp', text: 'Sem réplicas' },
+    ...alert.includeTerms.map((t) => ({ key: `+${t}`, text: `+ ${t}` })),
+    ...alert.excludeTerms.map((t) => ({ key: `-${t}`, text: `− ${t}` })),
+  ].filter(Boolean) as { key: string; text: string; title?: string }[]
 
   return (
     <article
-      className={`card flex flex-col gap-4 p-5 transition-[border-color,box-shadow] duration-200 ${
+      className={`card flex flex-col gap-2.5 p-4 transition-[border-color,box-shadow] duration-200 ${
         selected ? 'border-gold-light shadow-soft-md' : ''
       } ${alert.active ? '' : 'bg-surface-soft'}`}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span
-              className={`h-2 w-2 shrink-0 rounded-full ${alert.active ? 'bg-gold' : 'bg-border-strong'}`}
-              aria-hidden
-            />
-            <h3 className={`truncate text-base font-medium ${alert.active ? 'text-fg' : 'text-fg-secondary'}`}>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${alert.active ? 'bg-gold' : 'bg-border-strong'}`} aria-hidden />
+            <h3
+              title={alert.name}
+              className={`truncate text-sm font-medium ${alert.active ? 'text-fg' : 'text-fg-secondary'}`}
+            >
               {alert.name}
             </h3>
           </div>
-          {alert.name !== alert.query && (
-            <p className="mt-1 truncate pl-4 text-sm text-fg-secondary">“{alert.query}”</p>
-          )}
+          {alert.name !== alert.query && <p className="mt-0.5 truncate pl-3.5 text-xs text-fg-muted">“{alert.query}”</p>}
         </div>
-        <Toggle
-          checked={alert.active}
-          onChange={onToggleActive}
-          label={alert.active ? 'Ativo' : 'Pausado'}
-          labelClassName="text-xs font-medium text-fg-secondary"
-        />
+        <span title={alert.active ? 'Ativo: clique para pausar' : 'Pausado: clique para ativar'} className="pt-0.5">
+          <Toggle
+            checked={alert.active}
+            onChange={onToggleActive}
+            label={<span className="sr-only">{alert.active ? 'Ativo' : 'Pausado'}</span>}
+            size="sm"
+          />
+        </span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {range && <span className="badge tabular-nums">{range}</span>}
-        <span className="badge">{sources}</span>
-        {alert.onlyWatches && <span className="badge">Somente relógios</span>}
-        {alert.includeTerms.map((t) => (
-          <span key={`+${t}`} className="badge">
-            + {t}
-          </span>
-        ))}
-        {alert.excludeTerms.map((t) => (
-          <span key={`-${t}`} className="badge">
-            − {t}
-          </span>
-        ))}
-      </div>
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 pl-3.5">
+          {tags.map((t) => (
+            <span key={t.key} title={t.title} className="badge tabular-nums">
+              {t.text}
+            </span>
+          ))}
+        </div>
+      )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1.5">
-            <ChannelBadge on={alert.notifyEmail} configured={config.email} icon={<MailIcon className="h-3.5 w-3.5" />} label="E-mail" />
-            <ChannelBadge on={alert.notifyTelegram} configured={config.telegram} icon={<SendIcon className="h-3.5 w-3.5" />} label="Telegram" />
-          </div>
-          <div className="text-xs leading-snug text-fg-meta">
-            <p>
-              {alert.lastCheckedAt ? `Verificado ${formatRelative(alert.lastCheckedAt)}` : 'Aguardando primeira verificação'}
-            </p>
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border pt-2.5">
+        <div className="flex min-w-0 items-center gap-2.5 text-xs text-fg-meta">
+          <span className="flex shrink-0 items-center gap-1.5">
+            <ChannelIcon on={alert.notifyEmail} configured={config.email} icon={<MailIcon className="h-3.5 w-3.5" />} label="E-mail" />
+            <ChannelIcon on={alert.notifyTelegram} configured={config.telegram} icon={<SendIcon className="h-3.5 w-3.5" />} label="Telegram" />
+          </span>
+          <span className="truncate">
+            {alert.lastCheckedAt ? formatRelative(alert.lastCheckedAt) : 'Aguardando'}
+            {' · '}
             <button
               type="button"
               onClick={onShowFinds}
-              className={`font-medium transition-colors hover:text-fg ${selected ? 'text-gold-text' : 'text-fg-secondary'}`}
+              title="Ver os lotes encontrados por este alerta"
+              className={`font-medium underline-offset-2 transition-colors hover:text-fg hover:underline ${
+                selected ? 'text-gold-text' : 'text-fg-secondary'
+              }`}
             >
               {alert.findsCount ?? 0} encontrado(s)
-              {alert.lastNewCount > 0 && <span className="text-gold-deep"> · {alert.lastNewCount} na última</span>}
+              {alert.lastNewCount > 0 && <span className="text-gold-deep"> (+{alert.lastNewCount})</span>}
             </button>
-          </div>
+          </span>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button type="button" onClick={onCheck} disabled={checking} className="btn btn-secondary px-3 py-1.5 text-xs">
-            <RefreshIcon className={`h-3.5 w-3.5 ${checking ? 'animate-spin text-gold' : 'text-icon'}`} />
-            {checking ? 'Verificando…' : 'Verificar agora'}
-          </button>
+        <div className="flex shrink-0 items-center">
           <button
             type="button"
-            onClick={onEdit}
-            title="Editar"
-            className="rounded-lg p-2 text-icon transition-colors hover:bg-surface-muted hover:text-fg"
+            onClick={onCheck}
+            disabled={checking}
+            title={checking ? 'Verificando…' : 'Verificar agora'}
+            aria-label="Verificar agora"
+            className={`${iconButton} hover:bg-surface-muted hover:text-fg`}
           >
+            <RefreshIcon className={`h-4 w-4 ${checking ? 'animate-spin text-gold' : ''}`} />
+          </button>
+          <button type="button" onClick={onEdit} title="Editar" aria-label="Editar" className={`${iconButton} hover:bg-surface-muted hover:text-fg`}>
             <PencilIcon className="h-4 w-4" />
           </button>
           <button
             type="button"
             onClick={onDelete}
             title="Excluir"
-            className="rounded-lg p-2 text-icon transition-colors hover:bg-danger-soft hover:text-danger"
+            aria-label="Excluir"
+            className={`${iconButton} hover:bg-danger-soft hover:text-danger`}
           >
             <TrashIcon className="h-4 w-4" />
           </button>
@@ -147,7 +153,10 @@ export function AlertCard({ alert, config, checking, selected, onToggleActive, o
       </div>
 
       {alert.lastError && (
-        <p className="rounded-lg border border-danger-border bg-danger-soft px-3 py-2 text-xs leading-relaxed text-danger">
+        <p
+          title={alert.lastError}
+          className="line-clamp-2 rounded-lg border border-danger-border bg-danger-soft px-2.5 py-1.5 text-[11px] leading-snug text-danger"
+        >
           {alert.lastError}
         </p>
       )}

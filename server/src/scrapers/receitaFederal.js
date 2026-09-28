@@ -118,6 +118,7 @@ async function buildIndex() {
         location: `${ref.edital.cidade} · lote ${ref.lote.nrAtribuido} · propostas até ${ref.edital.dataFimPropostas}`,
         buyingOptions: [],
         source: "receitafederal",
+        priceType: "bid",
         searchText: normalize(`${title} ${ref.lote.tipo}`),
       };
     } catch (err) {

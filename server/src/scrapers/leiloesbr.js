@@ -65,6 +65,7 @@ export async function searchLeiloesBR({ query, limit = 30 }) {
       location: dateLocation,
       buyingOptions: [],
       source: "leiloesbr",
+      priceType: "bid",
     });
   });
 

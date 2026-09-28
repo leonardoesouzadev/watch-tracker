@@ -15,6 +15,9 @@ Antes, configure o Supabase e o Telegram seguindo o
 
 ## 1. Cadastrar os secrets no GitHub
 
+> **Configurou pelo instalador (`/install`)?** Cadastre só o `DATABASE_URL`: o
+> robô lê o Telegram e o e-mail do banco. Ver [INSTALACAO.md](INSTALACAO.md).
+
 O runner do GitHub não lê o seu `server/.env`. As mesmas variáveis precisam
 ser cadastradas como **secrets** do repositório, que ficam criptografados e
 não aparecem nos logs.

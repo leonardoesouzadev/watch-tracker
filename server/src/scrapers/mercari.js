@@ -110,6 +110,7 @@ export async function searchMercari({ query, limit = 30 }) {
     location: "Japão",
     buyingOptions: [],
     source: "mercari",
+    priceType: "fixed",
   }));
 
   return { query, total: Number(data.meta?.numFound) || items.length, items };

@@ -18,6 +18,7 @@ Antes, configure o bot e o `TELEGRAM_CHAT_ID` seguindo o
 | `rolex submariner` | O mesmo: qualquer texto sem `/` é tratado como busca |
 | `/buscar omega até 30000` | Busca só lotes de até R$ 30.000 |
 | `/alertas` | Lista os alertas da pessoa, com botões para pausar/ativar e excluir cada um |
+| `/acompanhando` | Lista os lotes acompanhados (⭐), com botão para parar de acompanhar cada um |
 | `/sobre` | Explica o que é o Watch Tracker, as fontes, como a busca filtra e como funcionam os alertas |
 | `/informacoes` | Explica o tempo de resposta, o aviso "tempo esgotado", "nenhum lote encontrado" e outros erros |
 | `/ajuda` ou `/start` | Mostra as instruções e a lista de comandos |

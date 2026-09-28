@@ -3,6 +3,7 @@ import type { Alert, AlertInput } from '../types'
 import { BUILT_IN_SOURCES } from '../sourceLabels'
 import { WATCH_BRANDS } from '../watchFilter'
 import { Toggle } from './Toggle'
+import { CurrencyInput } from './CurrencyInput'
 import { CheckIcon, XIcon } from './icons'
 
 interface Props {
@@ -25,8 +26,8 @@ export function AlertForm({ alert, initial, onSubmit, onClose }: Props) {
   const values = alert ?? initial
   const [query, setQuery] = useState(values?.query ?? '')
   const [name, setName] = useState(alert && alert.name !== alert.query ? alert.name : '')
-  const [minPrice, setMinPrice] = useState(values?.minPrice?.toString() ?? '')
-  const [maxPrice, setMaxPrice] = useState(values?.maxPrice?.toString() ?? '')
+  const [minPrice, setMinPrice] = useState(values?.minPrice != null ? String(Math.round(values.minPrice)) : '')
+  const [maxPrice, setMaxPrice] = useState(values?.maxPrice != null ? String(Math.round(values.maxPrice)) : '')
   const [includeTerms, setIncludeTerms] = useState(values?.includeTerms?.join(', ') ?? '')
   const [excludeTerms, setExcludeTerms] = useState(values?.excludeTerms?.join(', ') ?? '')
   const [sources, setSources] = useState<Set<string>>(
@@ -36,6 +37,9 @@ export function AlertForm({ alert, initial, onSubmit, onClose }: Props) {
   const [notifyEmail, setNotifyEmail] = useState(alert?.notifyEmail ?? true)
   const [notifyTelegram, setNotifyTelegram] = useState(alert?.notifyTelegram ?? true)
   const [active, setActive] = useState(alert?.active ?? true)
+  const [reference, setReference] = useState(values?.reference ?? '')
+  const [hideSuspicious, setHideSuspicious] = useState(values?.hideSuspicious ?? false)
+  const [digest, setDigest] = useState(values?.digest ?? false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const queryRef = useRef<HTMLInputElement>(null)
@@ -82,6 +86,9 @@ export function AlertForm({ alert, initial, onSubmit, onClose }: Props) {
         notifyEmail,
         notifyTelegram,
         active,
+        reference: reference.trim() || null,
+        hideSuspicious,
+        digest,
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar')
@@ -156,28 +163,24 @@ export function AlertForm({ alert, initial, onSubmit, onClose }: Props) {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="field-label flex flex-col gap-1.5">
-              Preço mín. (R$)
-              <input
-                type="number"
-                min={0}
-                inputMode="decimal"
-                value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value)}
-                placeholder="0"
-                className="field tabular-nums"
-              />
+              Preço mín.
+              <CurrencyInput value={minPrice} onChange={setMinPrice} placeholder="R$ 0" />
             </label>
             <label className="field-label flex flex-col gap-1.5">
-              Preço máx. (R$)
+              Preço máx.
+              <CurrencyInput value={maxPrice} onChange={setMaxPrice} placeholder="Sem limite" />
+            </label>
+            <label className="field-label flex flex-col gap-1.5 sm:col-span-2">
+              Referência exata
               <input
-                type="number"
-                min={0}
-                inputMode="decimal"
-                value={maxPrice}
-                onChange={(e) => setMaxPrice(e.target.value)}
-                placeholder="Sem limite"
-                className="field tabular-nums"
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+                placeholder="ex: 116610LN, 5711/1A, SBGA211"
+                className="field font-mono"
               />
+              <span className="font-normal text-fg-muted">
+                Ignora espaços e pontuação. "116610" também pega "116610LN", mas não "1166100".
+              </span>
             </label>
             <label className="field-label flex flex-col gap-1.5">
               Deve conter no título
@@ -227,7 +230,17 @@ export function AlertForm({ alert, initial, onSubmit, onClose }: Props) {
             <Toggle checked={active} onChange={() => setActive((v) => !v)} label="Alerta ativo" />
             <Toggle checked={notifyEmail} onChange={() => setNotifyEmail((v) => !v)} label="Avisar por e-mail" />
             <Toggle checked={notifyTelegram} onChange={() => setNotifyTelegram((v) => !v)} label="Avisar no Telegram" />
+            <Toggle
+              checked={hideSuspicious}
+              onChange={() => setHideSuspicious((v) => !v)}
+              label="Ignorar possíveis réplicas"
+            />
+            <Toggle checked={digest} onChange={() => setDigest((v) => !v)} label="Resumo diário (8h)" />
           </div>
+          <p className="-mt-3 text-xs leading-relaxed text-fg-muted">
+            Os preços em outras moedas são convertidos para reais pela cotação do dia antes de comparar com a faixa de
+            preço. No resumo diário, os lotes novos chegam juntos numa só mensagem às 8h, em vez de um aviso por lote.
+          </p>
 
           {!alert && (
             <p className="text-xs leading-relaxed text-fg-secondary">

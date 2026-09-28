@@ -58,6 +58,9 @@ function parseAlertBody(body = {}, { partial = false } = {}) {
   if (has("notifyEmail")) out.notifyEmail = body.notifyEmail !== false;
   if (has("notifyTelegram")) out.notifyTelegram = body.notifyTelegram !== false;
   if (has("active")) out.active = body.active !== false;
+  if (has("reference")) out.reference = String(body.reference ?? "").trim() || null;
+  if (has("hideSuspicious")) out.hideSuspicious = body.hideSuspicious === true;
+  if (has("digest")) out.digest = body.digest === true;
 
   for (const key of Object.keys(out)) if (out[key] === undefined) delete out[key];
   return out;
@@ -137,8 +140,13 @@ router.get(
   "/alerts/finds",
   handle(async (req, res) => {
     const alertId = req.query.alertId ? Number(req.query.alertId) : null;
-    const limit = Math.min(Number(req.query.limit) || 60, 200);
-    res.json({ finds: await db.listFinds({ alertId, limit }) });
+    const pageSize = Math.min(Math.max(Number(req.query.pageSize) || 20, 1), 100);
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    // Absent = every source; "sources=" (empty) = none.
+    const sources = req.query.sources === undefined ? null : String(req.query.sources).split(",").filter(Boolean);
+    const q = String(req.query.q ?? "").trim().slice(0, 100);
+    const result = await db.listFinds({ alertId, sources, q, limit: pageSize, offset: (page - 1) * pageSize });
+    res.json({ ...result, page, pageSize });
   })
 );
 

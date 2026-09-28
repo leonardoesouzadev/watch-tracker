@@ -1,12 +1,17 @@
 import pg from "pg";
 
 // Postgres connection for saved alerts. Any Postgres works (Neon, Supabase,
-// Vercel Postgres, local); the schema is created on first use.
+// Vercel Postgres, local); the schema is created on first use. POSTGRES_URL is
+// what Vercel's Supabase/Postgres integrations set.
 let pool = null;
 let schemaReady = null;
 
+function databaseUrl() {
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
+}
+
 export function isDatabaseConfigured() {
-  return Boolean(process.env.DATABASE_URL);
+  return Boolean(databaseUrl());
 }
 
 function getPool() {
@@ -16,7 +21,7 @@ function getPool() {
     throw err;
   }
   if (!pool) {
-    const url = process.env.DATABASE_URL;
+    const url = databaseUrl();
     const isLocal = /localhost|127\.0\.0\.1/.test(url);
     pool = new pg.Pool({
       connectionString: url,
@@ -88,6 +93,60 @@ CREATE TABLE IF NOT EXISTS bot_usage (
   chat_id        TEXT PRIMARY KEY,
   last_search_at TIMESTAMPTZ NOT NULL
 );
+
+-- Configuration saved by the /install wizard (see settings.js).
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Exact reference to match (e.g. 116610LN), replica filter and daily digest.
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS reference TEXT;
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS hide_suspicious BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS digest BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS last_digest_at TIMESTAMPTZ;
+
+-- Extra listing fields shown in finds and digests (landed cost, references,
+-- suspicious reasons, translated title, end time).
+ALTER TABLE alert_listings ADD COLUMN IF NOT EXISTS details JSONB;
+-- Matches of daily-digest alerts wait here until the next digest goes out.
+ALTER TABLE alert_listings ADD COLUMN IF NOT EXISTS pending_digest BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Japanese titles translated to Portuguese (see translate.js).
+CREATE TABLE IF NOT EXISTS translations (
+  source_text TEXT PRIMARY KEY,
+  text_pt     TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Lots someone chose to follow (⭐): bid changes and closing reminders.
+-- Owner like alerts: NULL = the app owner, else a Telegram chat id.
+CREATE TABLE IF NOT EXISTS watched_lots (
+  id               SERIAL PRIMARY KEY,
+  telegram_chat_id TEXT,
+  listing_id       TEXT NOT NULL,
+  listing          JSONB NOT NULL,
+  last_price       NUMERIC,
+  currency         TEXT,
+  ends_at          TIMESTAMPTZ,
+  ended            BOOLEAN NOT NULL DEFAULT FALSE,
+  reminded_24h     BOOLEAN NOT NULL DEFAULT FALSE,
+  reminded_3h      BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_checked_at  TIMESTAMPTZ,
+  last_error       TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS watched_lots_owner_listing_idx
+  ON watched_lots ((COALESCE(telegram_chat_id, '')), listing_id);
+
+-- Listings the bot sent with a "⭐ Acompanhar" button: Telegram's
+-- callback_data only fits a short key, so the listing is looked up here.
+CREATE TABLE IF NOT EXISTS listing_snapshots (
+  key        TEXT PRIMARY KEY,
+  listing    JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 // Alerts are scoped by owner: null = the app owner, otherwise a Telegram chat id.
@@ -126,6 +185,10 @@ function toAlert(row) {
     lastNewCount: row.last_new_count,
     findsCount: row.finds_count === undefined ? undefined : Number(row.finds_count),
     telegramChatId: row.telegram_chat_id,
+    reference: row.reference ?? null,
+    hideSuspicious: row.hide_suspicious ?? false,
+    digest: row.digest ?? false,
+    lastDigestAt: row.last_digest_at ?? null,
   };
 }
 
@@ -145,6 +208,7 @@ function toFind(row) {
       location: row.location,
       buyingOptions: [],
       source: row.source,
+      ...(row.details ?? {}),
     },
   };
 }
@@ -161,6 +225,9 @@ const ALERT_COLUMNS = {
   notifyEmail: "notify_email",
   notifyTelegram: "notify_telegram",
   active: "active",
+  reference: "reference",
+  hideSuspicious: "hide_suspicious",
+  digest: "digest",
 };
 
 export async function listAlerts({ owner = null } = {}) {
@@ -233,11 +300,25 @@ export async function getSeenListingIds(alertId) {
   return new Set(rows.map((r) => r.listing_id));
 }
 
+// Fields added to search results after the scrape (see search.js enrich).
+function listingDetails(item) {
+  const details = {
+    priceType: item.priceType ?? null,
+    endsAt: item.endsAt ?? null,
+    priceBRL: item.priceBRL ?? null,
+    landedCost: item.landedCost ?? null,
+    references: item.references ?? [],
+    suspicious: item.suspicious ?? [],
+    titlePt: item.titlePt ?? null,
+  };
+  return JSON.stringify(details);
+}
+
 export async function insertListings(alertId, entries) {
   if (entries.length === 0) return;
   const values = [];
-  const tuples = entries.map(({ item, matched, baseline }, i) => {
-    const base = i * 12;
+  const tuples = entries.map(({ item, matched, baseline, pendingDigest = false }, i) => {
+    const base = i * 14;
     values.push(
       alertId,
       item.id,
@@ -250,13 +331,16 @@ export async function insertListings(alertId, entries) {
       item.seller,
       item.location,
       matched,
-      baseline
+      baseline,
+      listingDetails(item),
+      pendingDigest
     );
-    return `(${Array.from({ length: 12 }, (_, j) => `$${base + j + 1}`).join(", ")})`;
+    return `(${Array.from({ length: 14 }, (_, j) => `$${base + j + 1}`).join(", ")})`;
   });
   await query(
     `INSERT INTO alert_listings
-       (alert_id, listing_id, title, price_value, currency, image, item_url, source, seller, location, matched, baseline)
+       (alert_id, listing_id, title, price_value, currency, image, item_url, source, seller, location, matched, baseline,
+        details, pending_digest)
      VALUES ${tuples.join(", ")}
      ON CONFLICT (alert_id, listing_id) DO NOTHING`,
     values
@@ -272,18 +356,38 @@ export async function recordCheck(alertId, { baselinedSources, lastError, newCou
   );
 }
 
-export async function listFinds({ alertId = null, limit = 60, owner = null } = {}) {
-  const { rows } = await query(
-    `SELECT l.*, a.name AS alert_name
-     FROM alert_listings l
-     JOIN alerts a ON a.id = l.alert_id
-     WHERE l.matched AND NOT l.baseline AND ($1::int IS NULL OR l.alert_id = $1::int)
-       AND a.${OWNER_FILTER} $3
-     ORDER BY l.first_seen_at DESC
-     LIMIT $2`,
-    [alertId, limit, owner]
-  );
-  return rows.map(toFind);
+/**
+ * One page of an owner's finds, newest first, plus the total and the count per
+ * source (for the source filter; it ignores the source filter itself).
+ * `q` matches the title or its Portuguese translation.
+ */
+export async function listFinds({ alertId = null, sources = null, q = "", limit = 20, offset = 0, owner = null } = {}) {
+  const base = `FROM alert_listings l JOIN alerts a ON a.id = l.alert_id
+     WHERE l.matched AND NOT l.baseline AND a.${OWNER_FILTER} $1
+       AND ($2::int IS NULL OR l.alert_id = $2::int)
+       AND ($3::text = '' OR l.title ILIKE '%' || $3 || '%' OR l.details->>'titlePt' ILIKE '%' || $3 || '%')`;
+  const params = [owner, alertId, q.replace(/[%_\\]/g, "\\$&")];
+  const bySource = `AND ($4::text[] IS NULL OR l.source = ANY($4::text[]))`;
+
+  const [page, facets] = await Promise.all([
+    query(
+      `SELECT l.*, a.name AS alert_name, COUNT(*) OVER () AS total ${base} ${bySource}
+       ORDER BY l.first_seen_at DESC LIMIT $5 OFFSET $6`,
+      [...params, sources, limit, offset]
+    ),
+    query(`SELECT l.source, COUNT(*)::int AS n ${base} GROUP BY l.source`, params),
+  ]);
+  let total = page.rows[0] ? Number(page.rows[0].total) : 0;
+  // Past the last page there are no rows to carry the total: count separately.
+  if (!page.rows[0] && offset > 0) {
+    const { rows } = await query(`SELECT COUNT(*)::int AS n ${base} ${bySource}`, [...params, sources]);
+    total = rows[0].n;
+  }
+  return {
+    finds: page.rows.map(toFind),
+    total,
+    sources: Object.fromEntries(facets.rows.map((r) => [r.source, r.n])),
+  };
 }
 
 /**
@@ -298,4 +402,31 @@ export async function claimSearchSlot(chatId, cooldownSeconds) {
     [String(chatId), cooldownSeconds]
   );
   return rowCount > 0;
+}
+
+// ---------- Daily digest ----------
+
+/** Digest alerts with matches waiting, whose last digest wasn't sent after `since`. */
+export async function listDigestsDue(since) {
+  const { rows } = await query(
+    `SELECT a.* FROM alerts a
+     WHERE a.digest AND (a.last_digest_at IS NULL OR a.last_digest_at < $1)
+       AND EXISTS (SELECT 1 FROM alert_listings l WHERE l.alert_id = a.id AND l.pending_digest)`,
+    [since]
+  );
+  return rows.map(toAlert);
+}
+
+export async function listPendingDigest(alertId) {
+  const { rows } = await query(
+    `SELECT l.*, a.name AS alert_name FROM alert_listings l JOIN alerts a ON a.id = l.alert_id
+     WHERE l.alert_id = $1 AND l.pending_digest ORDER BY l.first_seen_at`,
+    [alertId]
+  );
+  return rows.map((r) => toFind(r).listing);
+}
+
+export async function markDigestSent(alertId) {
+  await query("UPDATE alert_listings SET pending_digest = FALSE WHERE alert_id = $1 AND pending_digest", [alertId]);
+  await query("UPDATE alerts SET last_digest_at = NOW() WHERE id = $1", [alertId]);
 }

@@ -31,6 +31,8 @@ jobs:
 
       - name: Check alerts
         run: npm run check-alerts --workspace=server
+        # With the /install wizard only DATABASE_URL is needed: the rest is
+        # read from the settings table. The others are the env-var fallback.
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

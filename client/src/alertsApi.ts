@@ -32,9 +32,30 @@ export function checkAlertNow(id: number) {
   return request<{ newCount: number; errors: string[]; alert: Alert }>(`/alerts/${id}/check`, { method: 'POST' })
 }
 
-export function fetchFinds(alertId?: number) {
-  const qs = alertId ? `?alertId=${alertId}` : ''
-  return request<{ finds: AlertFind[] }>(`/alerts/finds${qs}`)
+export interface FindsQuery {
+  alertId?: number | null
+  /** null = every source. */
+  sources?: string[] | null
+  q?: string
+  page?: number
+  pageSize?: number
+}
+
+export interface FindsPage {
+  finds: AlertFind[]
+  total: number
+  page: number
+  pageSize: number
+  /** Finds per source (ignoring the source filter), for the source picker. */
+  sources: Record<string, number>
+}
+
+export function fetchFinds({ alertId, sources, q, page = 1, pageSize = 20 }: FindsQuery = {}) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+  if (alertId) params.set('alertId', String(alertId))
+  if (sources) params.set('sources', sources.join(','))
+  if (q?.trim()) params.set('q', q.trim())
+  return request<FindsPage>(`/alerts/finds?${params}`)
 }
 
 export function sendTestNotification() {

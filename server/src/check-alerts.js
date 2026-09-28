@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { checkAllAlerts } from "./alerts/checker.js";
 import { closePool, isDatabaseConfigured } from "./alerts/db.js";
+import { loadSettings } from "./settings.js";
 
 // One-shot run of the alert robot, used by GitHub Actions
 // (.github/workflows/check-alerts.yml) so alerts don't depend on Vercel.
@@ -15,6 +16,8 @@ if (!isDatabaseConfigured()) {
 }
 
 try {
+  // Telegram and e-mail settings come from the /install wizard (or env vars).
+  await loadSettings();
   const r = await checkAllAlerts({ budgetMs: BUDGET_MS, sourceTimeoutMs: SOURCE_TIMEOUT_MS });
   console.log(`[alerts] ${r.checked} checked, ${r.skipped} skipped, ${r.newListings} new, ${r.durationMs}ms`);
   for (const result of r.results) {

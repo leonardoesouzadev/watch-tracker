@@ -12,6 +12,7 @@
     { "path": "/api/cron/check-alerts", "schedule": "0 11 * * *" }
   ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" }
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/install", "destination": "/index.html" }
   ]
 }

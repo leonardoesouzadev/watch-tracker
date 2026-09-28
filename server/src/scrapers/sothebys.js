@@ -81,6 +81,7 @@ export async function searchSothebys({ query, limit = 30 }) {
     location: Array.isArray(hit.auctionLocations) ? hit.auctionLocations.join(", ") : null,
     buyingOptions: [],
     source: "sothebys",
+    priceType: "estimate",
   }));
 
   return { query, total: items.length, items };

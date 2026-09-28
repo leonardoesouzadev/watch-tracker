@@ -1,6 +1,7 @@
 import app from "./app.js";
 import { checkAllAlerts } from "./alerts/checker.js";
 import { isDatabaseConfigured } from "./alerts/db.js";
+import { loadSettings } from "./settings.js";
 
 const PORT = process.env.PORT || 4000;
 
@@ -13,7 +14,8 @@ app.listen(PORT, () => {
 const intervalMinutes = Number(process.env.ALERTS_INTERVAL_MINUTES);
 if (intervalMinutes > 0 && isDatabaseConfigured()) {
   const run = () =>
-    checkAllAlerts()
+    loadSettings()
+      .then(() => checkAllAlerts())
       .then((r) => console.log(`[alerts] ${r.checked} checked, ${r.newListings} new, ${r.durationMs}ms`))
       .catch((err) => console.error("[alerts]", err));
   setInterval(run, intervalMinutes * 60 * 1000);

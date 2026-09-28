@@ -4,6 +4,9 @@ import cors from "cors";
 import { runSearch, SOURCES } from "./search.js";
 import alertRoutes from "./alerts/routes.js";
 import telegramRoutes from "./telegram/routes.js";
+import installRoutes from "./install/routes.js";
+import watchlistRoutes from "./watchlist/routes.js";
+import { loadSettings } from "./settings.js";
 
 // LeilõesBR's search can take 30–80 s to answer. Vercel kills the function at
 // 60 s (vercel.json), which would lose every source; give up on slow ones
@@ -14,6 +17,17 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Settings saved by the /install wizard (cached; see settings.js).
+app.use((_req, _res, next) => {
+  loadSettings().then(
+    () => next(),
+    (err) => {
+      console.error("[settings]", err.message);
+      next();
+    }
+  );
+});
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
@@ -33,6 +47,8 @@ app.post("/api/search", async (req, res) => {
 
 app.use("/api", alertRoutes);
 app.use("/api", telegramRoutes);
+app.use("/api", installRoutes);
+app.use("/api", watchlistRoutes);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {

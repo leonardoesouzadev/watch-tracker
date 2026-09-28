@@ -81,6 +81,7 @@ async function searchCatalog(catalogUrl, query, limit) {
       location: null,
       buyingOptions: [],
       source: "miltonsayegh",
+      priceType: "bid",
     });
   });
 

@@ -11,6 +11,36 @@ export interface Listing {
   location: string | null
   buyingOptions: string[]
   source: ListingSource
+  /** What `price` is: current bid, estimate, asking price or valuation. */
+  priceType?: 'bid' | 'estimate' | 'fixed' | 'appraisal' | null
+  /** When bidding closes (ISO). */
+  endsAt?: string | null
+  /** Portuguese title of Japanese listings. */
+  titlePt?: string | null
+  priceBRL?: number | null
+  landedCost?: LandedCost | null
+  references?: string[]
+  /** Why it looks like a replica ([] = nothing found). */
+  suspicious?: string[]
+}
+
+export interface LandedCost {
+  kind?: 'commission' | 'import'
+  premiumRate?: number
+  total: number
+  lines: { label: string; value: number }[]
+  notes: string[]
+}
+
+export interface WatchedLot {
+  id: number
+  listing: Listing
+  lastPrice: Listing['price']
+  endsAt: string | null
+  ended: boolean
+  createdAt: string
+  lastCheckedAt: string | null
+  lastError: string | null
 }
 
 export interface SourceStatus {
@@ -46,6 +76,11 @@ export interface Alert {
   notifyEmail: boolean
   notifyTelegram: boolean
   active: boolean
+  /** Exact reference to match, e.g. 116610LN. */
+  reference: string | null
+  hideSuspicious: boolean
+  /** One summary a day instead of a message per lot. */
+  digest: boolean
   createdAt: string
   lastCheckedAt: string | null
   lastError: string | null
@@ -66,6 +101,9 @@ export type AlertInput = Pick<
   | 'notifyEmail'
   | 'notifyTelegram'
   | 'active'
+  | 'reference'
+  | 'hideSuspicious'
+  | 'digest'
 >
 
 export interface AlertFind {

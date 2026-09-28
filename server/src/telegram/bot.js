@@ -1,10 +1,19 @@
 import { runSearch } from "../search.js";
 import { isLikelyWatch } from "../../../shared/watchFilter.js";
 import { normalize } from "../../../shared/normalize.js";
-import { SOURCE_LABEL } from "../../../shared/sources.js";
+import { BUILT_IN_SOURCES, SOURCE_LABEL } from "../../../shared/sources.js";
 import * as db from "../alerts/db.js";
+import * as watchlist from "../watchlist/db.js";
 import { checkAlert } from "../alerts/checker.js";
-import { escapeHtml, listingCaption, sendListingMessage, telegram } from "../alerts/notify.js";
+import {
+  escapeHtml,
+  formatEndsAt,
+  formatPrice,
+  listingCaption,
+  sendListingMessage,
+  telegram,
+} from "../alerts/notify.js";
+import { setting } from "../settings.js";
 
 // Public Telegram bot: anyone can search (/buscar or plain text) and keep
 // their own alerts (🔔 button, /alertas). Alerts belong to the chat that made
@@ -21,23 +30,30 @@ const CHECK_EVERY_HOURS = 2;
 const SEARCH_COOLDOWN_SECONDS = 30;
 // Each alert adds work to every scheduled run (see checker.js budget).
 const MAX_ALERTS_PER_USER = 5;
+// Followed lots per bot user (the owner has no limit).
+const MAX_WATCHED_PER_USER = 20;
 // Telegram caps callback_data at 64 bytes.
 const CALLBACK_DATA_MAX_BYTES = 64;
+
+const SOURCE_NAMES = BUILT_IN_SOURCES.map((s) => s.name);
+const SOURCE_LIST = `${SOURCE_NAMES.slice(0, -1).join(", ")} e ${SOURCE_NAMES.at(-1)}`;
 
 const HELP_TEXT = [
   "⌚ <b>Watch Tracker</b>",
   "",
-  "Mande o que quer procurar e eu busco nos leilões (LeilõesBR, Receita Federal, Milton Sayegh e Sotheby's).",
+  `Mande o que quer procurar e eu busco nos leilões e lojas: ${SOURCE_LIST}.`,
   "",
   "<b>Exemplos</b>",
   "<code>/buscar rolex submariner</code>",
   "<code>omega speedmaster até 30000</code>",
   "",
   "No fim de cada busca, o botão <b>🔔 Criar alerta</b> transforma a busca em um alerta: você passa a ser avisado dos lotes novos.",
+  "Em cada lote, <b>⭐ Acompanhar</b> avisa de novos lances e quando o leilão estiver terminando.",
   "",
   "<b>Comandos</b>",
   "/buscar — buscar lotes",
   "/alertas — ver, pausar e excluir seus alertas",
+  "/acompanhando — lotes que você acompanha",
   "/sobre — o que é o Watch Tracker e como a busca funciona",
   "/informacoes — tempo de resposta, avisos e erros",
   "/ajuda — esta mensagem",
@@ -49,16 +65,16 @@ const ABOUT_TEXT = [
   "Monitor de leilões de relógios no Brasil. Em vez de abrir site por site, você busca uma vez e vê os lotes de todas as fontes juntos.",
   "",
   "<b>Onde eu busco</b>",
-  "• <b>LeilõesBR</b>: reúne o catálogo de vários leiloeiros brasileiros.",
-  "• <b>Receita Federal</b>: leilões oficiais de mercadorias apreendidas (editais abertos, categoria relógios).",
-  "• <b>Milton Sayegh</b>: leiloeiro de joias e relógios (leilões em andamento).",
-  "• <b>Sotheby's</b>: leilões internacionais que ainda vão acontecer.",
+  `${SOURCE_LIST}.`,
   "",
   "<b>Como a busca funciona</b>",
-  "• Busco o termo nas 4 fontes ao mesmo tempo.",
+  "• Busco o termo em todas as fontes ao mesmo tempo.",
   "• Mostro só o que parece relógio (pulseiras, caixas e outros itens soltos ficam de fora).",
-  "• Com <code>até 30000</code> no fim, entram só lotes com preço até esse valor.",
+  "• Com <code>até 30000</code> no fim, entram só lotes com preço até esse valor em reais (preços em outras moedas são convertidos pela cotação do dia).",
   "• Envio os 5 primeiros e digo quantos encontrei no total.",
+  "• Lotes de fora vêm com uma estimativa do custo total no Brasil: comissão do leiloeiro, frete e impostos de importação.",
+  "• ⚠️ marca lotes com cara de réplica (termos como \"AAA\" ou preço muito abaixo do normal). É um alerta, não uma prova.",
+  "• Títulos em japonês vêm traduzidos quando a tradução está ativada.",
   "",
   "<b>Alertas</b>",
   `• O botão <b>🔔 Criar alerta</b> salva a busca. A cada ${CHECK_EVERY_HOURS} horas eu refaço a busca e aviso aqui quando aparece um lote novo.`,
@@ -73,7 +89,7 @@ const INFO_TEXT = [
   "ℹ️ <b>Informações e erros</b>",
   "",
   "<b>⏱ Por que a busca demora?</b>",
-  "Cada busca consulta os 4 sites na hora. A maioria responde em poucos segundos, mas o <b>LeilõesBR</b> é lento: o site leva de 30 a 80 segundos para responder. Por isso uma busca pode levar quase 1 minuto.",
+  "Cada busca consulta todos os sites na hora. A maioria responde em poucos segundos, mas o <b>LeilõesBR</b> é lento: o site leva de 30 a 80 segundos para responder. Por isso uma busca pode levar quase 1 minuto.",
   "",
   "<b>⚠️ \"tempo esgotado\"</b>",
   `Espero cada site por até ${SEARCH_TIMEOUT_MS / 1000} segundos. Se algum não responder a tempo (quase sempre o LeilõesBR), mostro os resultados dos outros e aviso qual ficou de fora. Não é erro seu: tente de novo mais tarde, ou com um termo mais específico.`,
@@ -102,13 +118,13 @@ const INFO_TEXT = [
 const INFO_HINT = "ℹ️ Entenda os avisos: /informacoes";
 
 function appUrl() {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
+  if (setting("APP_URL")) return setting("APP_URL").replace(/\/$/, "");
   if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   return null;
 }
 
 function isAppOwner(chatId) {
-  return String(chatId) === String(process.env.TELEGRAM_CHAT_ID);
+  return String(chatId) === String(setting("TELEGRAM_CHAT_ID"));
 }
 
 /** Alert owner for a chat: null for the app owner (shared with the web app), else the chat id. */
@@ -130,8 +146,10 @@ export function parseSearch(text) {
   return { query: text.slice(0, match.index).trim(), maxPrice: parseAmount(match[1], match[2]) };
 }
 
+/** Price in BRL (foreign prices converted); NaN when unknown. */
 function priceValue(item) {
-  return item.price ? Number(item.price.value) : NaN;
+  if (item.priceBRL != null) return item.priceBRL;
+  return item.price?.currency === "BRL" ? Number(item.price.value) : NaN;
 }
 
 function formatBRL(value) {
@@ -171,7 +189,7 @@ async function handleSearch(chatId, text) {
   // Same defaults as the app's search screen: only watches, price filter
   // drops listings without a price.
   const items = result.items
-    .filter((item) => isLikelyWatch(item.title))
+    .filter((item) => isLikelyWatch(item.titlePt ? `${item.title} ${item.titlePt}` : item.title))
     .filter((item) => maxPrice === null || priceValue(item) <= maxPrice);
 
   const failed = Object.entries(result.sources)
@@ -299,6 +317,69 @@ async function handleAlertAction(chatId, callback) {
   }).catch(() => {});
 }
 
+// ---------- Followed lots ----------
+
+async function handleWatch(chatId, callback) {
+  const [, key] = callback.data.split("|");
+  const listing = await watchlist.getSnapshot(key);
+  if (!listing) return answer(callback, "Não encontrei mais esse lote. Faça a busca de novo.", true);
+
+  const owner = ownerFor(chatId);
+  const existing = await watchlist.findWatched(owner, listing.id);
+  if (existing && !existing.ended) return answer(callback, "Você já acompanha esse lote. Veja em /acompanhando.");
+  if (owner !== null && (await watchlist.countWatched(owner)) >= MAX_WATCHED_PER_USER) {
+    return answer(callback, `Limite de ${MAX_WATCHED_PER_USER} lotes acompanhados. Remova um em /acompanhando.`, true);
+  }
+
+  await watchlist.watchLot(owner, listing);
+  await answer(callback, "⭐ Acompanhando! Aviso de novos lances e antes de terminar.");
+  await telegram("editMessageReplyMarkup", {
+    chat_id: chatId,
+    message_id: callback.message.message_id,
+    reply_markup: { inline_keyboard: [[{ text: "✅ Acompanhando", callback_data: "noop" }]] },
+  }).catch(() => {});
+}
+
+async function watchedView(chatId) {
+  const lots = (await watchlist.listWatched(ownerFor(chatId))).filter((l) => !l.ended);
+  if (lots.length === 0) {
+    return {
+      text: "Você não acompanha nenhum lote.\n\nNos resultados de uma busca ou de um alerta, toque em <b>⭐ Acompanhar</b> para ser avisado de novos lances e de quando o leilão estiver terminando.",
+      reply_markup: { inline_keyboard: [] },
+    };
+  }
+  const lines = lots.map((lot, i) => {
+    const l = lot.listing;
+    const title = escapeHtml((l.titlePt || l.title).slice(0, 80));
+    const ends = lot.endsAt ? ` · termina ${escapeHtml(formatEndsAt(lot.endsAt))}` : "";
+    const price = escapeHtml(formatPrice(lot.lastPrice ?? l.price));
+    return `${i + 1}. <a href="${escapeHtml(l.itemUrl)}">${title}</a>\n    ${price} · ${escapeHtml(SOURCE_LABEL[l.source] ?? l.source)}${ends}`;
+  });
+  const limit = isAppOwner(chatId) ? "" : ` (${lots.length} de ${MAX_WATCHED_PER_USER})`;
+  const keyboard = lots.map((lot, i) => [{ text: `🗑 Parar de acompanhar ${i + 1}`, callback_data: `unw|${lot.id}` }]);
+  return { text: `⭐ <b>Lotes acompanhados</b>${limit}\n\n${lines.join("\n\n")}`, reply_markup: { inline_keyboard: keyboard } };
+}
+
+async function handleListWatched(chatId) {
+  if (!db.isDatabaseConfigured()) return send(chatId, "Indisponível no momento.");
+  const view = await watchedView(chatId);
+  await send(chatId, view.text, { reply_markup: view.reply_markup });
+}
+
+async function handleUnwatch(chatId, callback) {
+  const [, rawId] = callback.data.split("|");
+  const removed = await watchlist.unwatch(Number(rawId), ownerFor(chatId));
+  await answer(callback, removed ? "Pronto, não acompanho mais esse lote." : "Esse lote já tinha saído da lista.");
+  const view = await watchedView(chatId);
+  await telegram("editMessageText", {
+    chat_id: chatId,
+    message_id: callback.message.message_id,
+    text: view.text,
+    disable_web_page_preview: true,
+    reply_markup: view.reply_markup,
+  }).catch(() => {});
+}
+
 /** Handles one Telegram update. Never throws: errors are reported in the chat. */
 export async function handleUpdate(update) {
   const message = update.message;
@@ -310,6 +391,8 @@ export async function handleUpdate(update) {
     if (callback?.data) {
       if (callback.data.startsWith("alert|")) return await handleCreateAlert(chatId, callback);
       if (/^(toggle|del)\|\d+$/.test(callback.data)) return await handleAlertAction(chatId, callback);
+      if (callback.data.startsWith("watch|")) return await handleWatch(chatId, callback);
+      if (/^unw\|\d+$/.test(callback.data)) return await handleUnwatch(chatId, callback);
       return await answer(callback, "");
     }
 
@@ -322,6 +405,7 @@ export async function handleUpdate(update) {
     const [, name, args] = command;
     if (name === "buscar") return await handleSearch(chatId, args);
     if (name === "alertas") return await handleListAlerts(chatId);
+    if (name === "acompanhando") return await handleListWatched(chatId);
     if (name === "sobre") return await send(chatId, ABOUT_TEXT);
     if (name === "informacoes") return await send(chatId, INFO_TEXT);
     await send(chatId, HELP_TEXT);

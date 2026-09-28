@@ -33,7 +33,7 @@ const TONES = {
     field:
       'rounded-[10px] border border-white/10 bg-ink-soft px-3 py-2 text-sm text-sidebar-fg transition-[border-color,box-shadow] duration-150 placeholder:text-sidebar-faint focus:border-gold focus:outline-none focus:ring-3 focus:ring-gold/15',
     icon: 'text-sidebar-faint',
-    list: 'border-white/10 bg-ink-muted shadow-soft-lg',
+    list: 'scroll-dark border-white/10 bg-ink-muted shadow-soft-lg',
     empty: 'text-sidebar-muted',
     option: 'text-white/75',
     optionActive: 'bg-white/6 text-white',

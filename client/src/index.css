@@ -68,6 +68,52 @@ body {
   color: var(--color-ink);
 }
 
+/* Scrollbars: thin, in the app's palette. `.scroll-dark` for dark surfaces
+   (sidebar, dark dropdowns). */
+:root {
+  --scrollbar-thumb: var(--color-border-strong);
+  --scrollbar-thumb-hover: var(--color-gold-light);
+  --scrollbar-track: transparent;
+}
+
+.scroll-dark {
+  --scrollbar-thumb: rgb(255 255 255 / 0.14);
+  --scrollbar-thumb-hover: rgb(201 162 39 / 0.6);
+}
+
+/* Chromium and Safari. Chromium ignores these when scrollbar-color is set,
+   so the standard properties below are only applied where these don't exist. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb) padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover) padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+}
+
 @layer components {
   /* Surfaces */
   .card {

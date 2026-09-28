@@ -34,6 +34,36 @@ novos desde a última busca.
     gerada pelo próprio servidor. Traz só anúncios à venda, com preço em iene
     (JPY). Os títulos costumam estar em japonês, por isso o filtro de relógios
     também reconhece 時計 e ウォッチ.
+  - **Casas internacionais:** Christie's, Phillips, Bonhams e Antiquorum (só
+    lotes de leilões abertos ou futuros), Catawiki (leilões semanais) e eBay
+    (API oficial Browse; precisa de chaves grátis, cadastradas no `/install`).
+  - **Japão:** Yahoo Leilões Japão, além do Mercari.
+  - **Brasil:** Caixa (leilão de joias do penhor; o catálogo só fica aberto
+    uns 4 dias antes de cada leilão), Mega Leilões, Zukerman (Portal Zuk) e
+    Sodré Santoro (leilões judiciais e extrajudiciais, onde relógio é raro).
+  - Cada fonte usa o que o próprio site usa por baixo (APIs internas, índices
+    Algolia/Typesense, HTML). Nenhuma dessas APIs é documentada, então uma
+    mudança no site pode quebrar a fonte; o erro aparece na busca e no alerta.
+- **Enriquecimento dos lotes** (`server/src/search.js`, antes de devolver a busca):
+  - **Preço em reais** pela cotação do dia (AwesomeAPI, cache de 1 h). As
+    faixas de preço da busca e dos alertas comparam sempre em reais.
+  - **Custo total no Brasil** (`shared/landedCost.js`): comissão do leiloeiro,
+    intermediário no Japão, frete, imposto de importação (60%) e ICMS (20%).
+    É uma estimativa; as taxas ficam numa tabela no topo do arquivo.
+  - **Referência** (`shared/reference.js`): números como 116610LN, 5711/1A-010
+    ou SBGA211 viram etiqueta no card e podem ser exigidos no alerta.
+  - **Possível réplica** (`shared/suspicious.js`): termos como "AAA" ou
+    "linha premium", ou preço fixo muito abaixo do normal para a marca.
+  - **Tradução** (`server/src/translate.js`): títulos em japonês traduzidos
+    pelo Claude, se houver chave da Anthropic no `/install`. Cada título é
+    traduzido uma vez só e fica guardado no banco.
+- **Acompanhar lote (⭐):** na busca, nos achados dos alertas ou no Telegram. O
+  robô avisa quando entra um lance novo, 24 h e 3 h antes do fim e quando o
+  leilão encerra. As fontes que conseguem atualizar um lote sozinho estão em
+  `LOT_FETCHERS` (`server/src/search.js`); as outras só recebem os lembretes
+  de horário.
+- **Resumo diário:** um alerta pode juntar os lotes novos numa mensagem só,
+  enviada na primeira rodada do robô depois das 8h (Brasília).
 - **Filtro de fontes:** cada fonte tem um interruptor na barra lateral pra
   incluir/excluir da busca.
 - **Busca manual sem banco:** palavras-chave e histórico de anúncios já
@@ -54,12 +84,18 @@ server/
   src/search.js                      Agrega os scrapers
   src/alerts/                        Alertas: banco (db), robô (checker), avisos (notify), rotas
   src/check-alerts.js                Roda o robô uma vez (usado pelo GitHub Actions)
+  src/settings.js                    Configurações salvas pelo instalador (com fallback para o .env)
+  src/install/                       Rotas do instalador (/install)
   src/telegram/                      Bot do Telegram: webhook, /buscar e registro (setup)
   src/scrapers/leiloesbr.js          Scraper do LeilõesBR (cheerio)
   src/scrapers/receitaFederal.js     Cliente da API do Leilão Eletrônico da Receita Federal
   src/scrapers/miltonsayegh.js       Scraper do Milton Sayegh Leilões (cheerio)
   src/scrapers/sothebys.js           Cliente do índice Algolia embutido na busca da Sotheby's
   src/scrapers/mercari.js            Cliente da API de busca do Mercari Japão (DPoP)
+  src/scrapers/*.js                  Demais fontes (uma por arquivo, registradas em search.js)
+  src/rates.js                       Cotação do dia para reais
+  src/translate.js                   Tradução dos títulos em japonês (Claude)
+  src/watchlist/                     Lotes acompanhados (⭐): banco, verificação e rotas
 shared/                              Código usado pelo cliente e pelo servidor (filtro de relógios, fontes)
 .github/workflows/check-alerts.yml   Agendador: roda o robô a cada 2 h no GitHub Actions
 ```
@@ -113,7 +149,12 @@ termo de busca reinicia o histórico do alerta.
 
 ### Configuração
 
-Todas as variáveis estão em `server/.env.example`. No Vercel, cadastre-as em
+**Instalador:** com o app publicado e um banco conectado, abra `/install` e
+configure Telegram e e-mail pelo navegador, sem editar variáveis. Roteiro
+completo para montar uma cópia para um cliente em
+[INSTALACAO.md](INSTALACAO.md).
+
+Configuração manual: todas as variáveis estão em `server/.env.example`. No Vercel, cadastre-as em
 *Settings → Environment Variables*. Passo a passo detalhado do Supabase e do
 Telegram em [CONFIGURACAO.md](CONFIGURACAO.md).
 
@@ -194,20 +235,14 @@ alerta com foto; o restante vai resumido (o e-mail lista todos).
 - **Superbid não foi integrado:** o site fica atrás de um desafio JS do
   Cloudflare ("Just a moment...") em todas as páginas, igual ao que já tinha
   bloqueado o OLX — não dá pra contornar com scraping simples de HTML.
-- **Phillips e Christie's também não foram integrados:** os dois usam
-  formatos de dados incorporados no HTML que não são JSON simples (diferente
-  da Sotheby's). O Phillips (`phillips.com/watches`) usa o formato
-  "turbo-stream" do React Router/Remix — a busca em si é só client-side (a
-  URL com `?q=` não filtra nada no servidor) e o payload embutido é uma árvore
-  de referências que não decodifica direto pra um objeto usável. O Christie's
-  tem duas partes distintas: a página do departamento
-  (`christies.com/en/departments/...`) usa Next.js com JSON simples mas não
-  tem lotes, só editorial; a busca de fato (`christies.com/en/results?query=`)
-  é outro app Next.js que usa o formato de streaming RSC (também não é JSON
-  simples) e ainda carrega um script de desafio do AWS WAF na página.
-- Outros leiloeiros/agregadores (Sodré Santoro etc.) podem ter proteção
-  anti-bot ou estrutura diferente — cada um precisaria do próprio scraper em
-  `server/src/scrapers/`.
+- **Fontes que dependem de passar por proteção anti-bot:** Catawiki (Akamai)
+  e Sodré Santoro (Azion) funcionam hoje com as requisições do servidor, mas
+  podem começar a responder 403 se o site apertar as regras.
+- **Yahoo Leilões Japão bloqueia acessos da Europa** (GDPR): um servidor
+  hospedado na UE recebe erro nessa fonte.
+- **eBay:** para as chaves de produção, o eBay exige tratar as notificações
+  de exclusão de conta. O caminho mais simples é declarar que o app não
+  guarda dados do eBay (ver [INSTALACAO.md](INSTALACAO.md)).
 - **Mercado Livre, OLX e Craigslist não foram integrados:** a API pública de
   busca do Mercado Livre agora exige autenticação OAuth (não dá pra fazer
   scraping nem chamar a API sem registrar um app em

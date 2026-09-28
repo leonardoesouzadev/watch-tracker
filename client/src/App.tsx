@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { KeywordManager } from './components/KeywordManager'
+import { KeywordChips, KeywordSearch } from './components/KeywordManager'
 import { ResultsPanel } from './components/ResultsPanel'
 import { AlertsPanel } from './components/AlertsPanel'
+import { WatchlistPanel } from './components/WatchlistPanel'
 import { SourceManager } from './components/SourceManager'
 import { SidebarSection } from './components/SidebarSection'
 import { Toggle } from './components/Toggle'
-import { WatchIcon, SearchIcon, GlobeIcon, RefreshIcon, BellIcon } from './components/icons'
+import { WatchIcon, SearchIcon, GlobeIcon, RefreshIcon, BellIcon, StarIcon } from './components/icons'
 import { searchKeyword } from './api'
 import {
   loadKeywords,
@@ -16,20 +17,24 @@ import {
   loadDisabledSources,
   saveDisabledSources,
 } from './storage'
-import { BUILT_IN_SOURCES } from './sourceLabels'
+import { BUILT_IN_SOURCES, REGIONS } from './sourceLabels'
 import type { KeywordState } from './types'
 
 const AUTO_REFRESH_MINUTES = 10
 
-type View = 'search' | 'alerts'
+type View = 'search' | 'alerts' | 'watchlist'
+
+const VIEW_HASH: Record<View, string> = { search: '', alerts: 'alertas', watchlist: 'acompanhando' }
 
 function viewFromHash(): View {
-  return window.location.hash === '#alertas' ? 'alerts' : 'search'
+  const hash = window.location.hash.replace('#', '')
+  return (Object.keys(VIEW_HASH) as View[]).find((v) => VIEW_HASH[v] === hash && hash) ?? 'search'
 }
 
 const NAV_ITEMS: { view: View; label: string; icon: typeof SearchIcon }[] = [
   { view: 'search', label: 'Busca', icon: SearchIcon },
   { view: 'alerts', label: 'Alertas', icon: BellIcon },
+  { view: 'watchlist', label: 'Acompanhando', icon: StarIcon },
 ]
 
 function stripSourceFromResults(
@@ -70,7 +75,7 @@ function App() {
   }, [])
 
   function navigate(next: View) {
-    window.location.hash = next === 'alerts' ? 'alertas' : ''
+    window.location.hash = VIEW_HASH[next]
     setView(next)
   }
 
@@ -157,20 +162,33 @@ function App() {
     if (selected) void runSearch(selected)
   }
 
+  // The ref is updated right away (not on the next render) so the refresh
+  // below already searches the source that was just turned back on.
+  function applyDisabledSources(next: Set<string>) {
+    disabledSourcesRef.current = next
+    setDisabledSources(next)
+    saveDisabledSources(next)
+  }
+
   function handleToggleBuiltIn(id: string) {
     const turningOff = !disabledSources.has(id)
-    setDisabledSources((prev) => {
-      const next = new Set(prev)
-      if (turningOff) next.add(id)
-      else next.delete(id)
-      saveDisabledSources(next)
-      return next
-    })
+    const next = new Set(disabledSources)
+    if (turningOff) next.add(id)
+    else next.delete(id)
+    applyDisabledSources(next)
     if (turningOff) {
       setResults((prev) => stripSourceFromResults(prev, id))
     } else {
       refreshSelected()
     }
+  }
+
+  function handleSetAllSources(enabled: boolean) {
+    const next = enabled ? new Set<string>() : new Set(BUILT_IN_SOURCES.map((s) => s.id))
+    const turnedOff = [...next].filter((id) => !disabledSources.has(id))
+    applyDisabledSources(next)
+    if (enabled) refreshSelected()
+    else setResults((prev) => turnedOff.reduce((acc, id) => stripSourceFromResults(acc, id), prev))
   }
 
   useEffect(() => {
@@ -183,7 +201,7 @@ function App() {
 
   return (
     <div className="grid min-h-screen grid-cols-1 bg-background md:grid-cols-[300px_1fr] lg:grid-cols-[320px_1fr]">
-      <aside className="flex flex-col bg-ink text-sidebar-fg md:sticky md:top-0 md:h-screen md:overflow-y-auto">
+      <aside className="scroll-dark flex flex-col bg-ink text-sidebar-fg md:sticky md:top-0 md:h-screen md:overflow-y-auto">
         <div className="px-6 pb-6 pt-7">
           <div className="flex items-center gap-3">
             <span className="flex h-9 w-9 items-center justify-center rounded-[10px] border border-gold/30 bg-gold/10 text-gold">
@@ -220,21 +238,13 @@ function App() {
         </nav>
 
         <div className={`flex-1 flex-col gap-6 px-6 pb-6 ${view === 'search' ? 'flex' : 'hidden'}`}>
-          <SidebarSection title="Buscar" icon={<SearchIcon className="h-4 w-4" />}>
-            <KeywordManager
-              keywords={keywords}
-              selected={selected}
-              onAdd={handleAdd}
-              onRemove={handleRemove}
-              onSelect={handleSelect}
-            />
-          </SidebarSection>
-
           <SidebarSection title="Fontes" icon={<GlobeIcon className="h-4 w-4" />}>
             <SourceManager
               builtInSources={BUILT_IN_SOURCES}
               disabledSources={disabledSources}
+              regions={REGIONS}
               onToggleBuiltIn={handleToggleBuiltIn}
+              onSetAll={handleSetAllSources}
             />
           </SidebarSection>
 
@@ -254,9 +264,19 @@ function App() {
       <main className="min-w-0 px-4 py-8 sm:px-8 md:px-10 md:py-10 xl:px-14 xl:py-12">
         {/* Kept mounted while hidden so its filters survive switching views. */}
         <div className={view === 'search' ? '' : 'hidden'}>
-          <ResultsPanel keyword={selected} state={selected ? results[selected] : undefined} />
+          <ResultsPanel
+            keyword={selected}
+            state={selected ? results[selected] : undefined}
+            searchBar={<KeywordSearch onAdd={handleAdd} />}
+            onRefresh={refreshSelected}
+            onSearch={handleAdd}
+            savedSearches={
+              <KeywordChips keywords={keywords} selected={selected} onRemove={handleRemove} onSelect={handleSelect} />
+            }
+          />
         </div>
         {view === 'alerts' && <AlertsPanel />}
+        {view === 'watchlist' && <WatchlistPanel />}
       </main>
     </div>
   )
